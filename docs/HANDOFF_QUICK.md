@@ -1,44 +1,44 @@
-# SOCIALSPACE — QUICK HANDOFF
-# Paste this at the start of every new chat. Full detail in HANDOFF_CURRENT.md.
-# Last updated: April 3, 2026
+﻿# SOCIALSPACE — QUICK HANDOFF
+# Last verified: April 5, 2026
 
 ## WHAT IT IS
-Multi-platform social media management agent. Backend + React frontend. Currently disconnected — zero real API integration. AI agent not started.
+Multi-platform social media agent. Backend + React frontend. Zero real integration. AI not started.
 
 ## SYSTEM STATUS
-- Frontend build: BROKEN (TypeScript errors across multiple files)
-- Frontend dev server: UNVERIFIED
-- Backend tests: WORKING (325 passed, 3 warnings)
+- Frontend build: BROKEN — 83 TypeScript errors across 25+ files
+- Backend tests: WORKING — 325 passed, 3 Pydantic warnings
 - Backend as live API: NOT STARTED
 - Database: NOT STARTED
-- Auth: DEMO MODE ONLY (fake login)
-- Real OAuth: NOT STARTED (any platform)
-- Real posting: NOT STARTED (any platform)
-- AI (Groq/OpenAI): NOT STARTED
-- Frontend→Backend calls: NONE (all data is hardcoded mock)
+- Auth: DEMO MODE (AuthContext.tsx fake login)
+- Real OAuth/posting: NOT STARTED
+- AI Groq/OpenAI: NOT STARTED
+- Frontend to Backend: NONE — all mock data
 
 ## NEXT TASK
-Run create_gitignore.ps1, make first git commit, then fix frontend TypeScript build errors one file at a time starting with AnalyticsPage.tsx.
+1. Run from frontend\: npm i --save-dev @types/node
+2. Fix EngagementChart.tsx lines 174 and 523
+3. Fix PlatformChart.tsx and PlatformStatus.tsx Record indexing
+4. Fix LucideIcon errors in MessageDetail.tsx and MessageList.tsx
+5. Remove unused imports across all files
+One file per chat session only.
 
-## TOP WARNINGS
-- DO NOT assume frontend build passes — it FAILS
-- DO NOT run git add -A without .gitignore committed first (node_modules will be included)
-- DO NOT add a 3rd auth/theme/api/composer pattern — consolidate existing duplicates
-- DO NOT assume backend is backend/app/routers structure — actual package is socialspace_agent
-- BE AWARE platform count is 12 (WeChat is ghost code — remove it)
+## CRITICAL WARNINGS
+- DO NOT commit without fixing .gitignore for frontend/.env.local first
+- DO NOT fix multiple files in one session
+- DO NOT add 3rd auth/theme/api/composer pattern
+- Canonical composer: pages/Composer/ComposerPage.tsx
+- Canonical auth: contexts/AuthContext.tsx not store/authStore.ts
+- cli.py is MISSING do not reference it
 
-## 3 MOST DANGEROUS OPEN ISSUES
-1. No git commits exist — any crash loses everything
-2. Frontend build fails — product cannot be deployed or demoed
-3. Auth/API client/composer duplicates — cannot safely add real backend without resolving first
+## 3 MOST DANGEROUS ISSUES
+1. frontend/.env.local unprotected — exposes API keys if committed
+2. Frontend build fails — 83 errors cannot deploy
+3. Duplicate API clients — lib/api.ts vs api/client.ts pick one before backend wiring
 
-## KEY FILES
-- Repo root: C:\Users\dheer\Downloads\socialspace-workspace\socialspace
-- Backend: socialspace\backend\socialspace_agent
-- Frontend: socialspace\frontend\src
-- Run tests (from backend\): ..\venv\Scripts\pytest.exe tests -q
-- Run build (from frontend\): npm run build
+## KEY PATHS
+- Repo: C:\Users\dheer\Downloads\socialspace-workspace\socialspace
+- Tests from backend\: ..\venv\Scripts\pytest.exe tests -q
+- Build from frontend\: npm run build
 - Full handoff: socialspace\docs\HANDOFF_CURRENT.md
 
-## SHELL CONVENTION
-PowerShell for ALL commands. Always specify which directory to run from.
+## SHELL: PowerShell always. State directory before every command.

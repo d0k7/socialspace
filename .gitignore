@@ -45,3 +45,6 @@ npm-debug.log*
 docs/VERIFICATION_OUTPUT.txt
 docs/HANDOFF_BACKUP.md
 docs/SESSION_END_OUTPUT.txt
+
+frontend/.env.local
+backend/socialspace_agent.egg-info/
