@@ -1,0 +1,123 @@
+# SocialSpace Agent - Python Dependencies
+# Created: February 6, 2026
+# Python Version: 3.11+
+
+# ============================================
+# CORE FRAMEWORK
+# ============================================
+# Hive agent framework (installed from local clone)
+# Install with: pip install -e ../../hive/core
+
+# ============================================
+# DATA VALIDATION & MODELS
+# ============================================
+pydantic>=2.5.0              # Data validation and settings management
+pydantic-settings>=2.1.0     # Settings management for Pydantic v2
+email-validator>=2.1.0       # Email validation for Pydantic
+
+# ============================================
+# ASYNC & CONCURRENCY
+# ============================================
+asyncio>=3.4.3               # Asynchronous I/O
+aiohttp>=3.9.0               # Async HTTP client/server
+aiofiles>=23.2.1             # Async file operations
+
+# ============================================
+# LLM & AI
+# ============================================
+anthropic>=0.8.0             # Anthropic Claude API
+openai>=1.6.0                # OpenAI API
+litellm>=1.17.0              # Multi-LLM support
+
+# ============================================
+# PLATFORM INTEGRATIONS
+# ============================================
+# Messaging platforms
+python-telegram-bot>=20.7    # Telegram bot API
+discord.py>=2.3.2            # Discord API
+tweepy>=4.14.0               # Twitter/X API
+
+# Social platforms
+facebook-sdk>=3.1.0          # Facebook Graph API
+instagrapi>=2.0.0            # Instagram API (unofficial)
+
+# Content platforms
+google-api-python-client>=2.110.0  # YouTube API
+TikTokApi>=5.3.0             # TikTok API (unofficial)
+
+# ============================================
+# DATA PROCESSING
+# ============================================
+pandas>=2.1.0                # Data manipulation
+numpy>=1.26.0                # Numerical computing
+
+# ============================================
+# DATABASE & CACHING
+# ============================================
+sqlalchemy>=2.0.0            # SQL toolkit and ORM
+alembic>=1.13.0              # Database migrations
+redis>=5.0.0                 # Redis client
+aiosqlite>=0.19.0            # Async SQLite
+
+# ============================================
+# HTTP & NETWORKING
+# ============================================
+httpx>=0.25.0                # Modern HTTP client
+requests>=2.31.0             # HTTP library
+urllib3>=2.1.0               # HTTP client
+
+# ============================================
+# UTILITIES
+# ============================================
+python-dotenv>=1.0.0         # Environment variable management
+pytz>=2023.3                 # Timezone handling
+python-dateutil>=2.8.2       # Date utilities
+tenacity>=8.2.3              # Retry library with exponential backoff
+ratelimit>=2.2.1             # Rate limiting
+
+# ============================================
+# LOGGING & MONITORING
+# ============================================
+loguru>=0.7.2                # Advanced logging
+sentry-sdk>=1.39.0           # Error tracking (optional)
+
+# ============================================
+# TESTING
+# ============================================
+pytest>=7.4.0                # Testing framework
+pytest-asyncio>=0.21.0       # Async test support
+pytest-cov>=4.1.0            # Coverage plugin
+pytest-mock>=3.12.0          # Mocking plugin
+pytest-timeout>=2.2.0        # Timeout plugin
+fakeredis>=2.20.0            # Fake Redis for testing
+
+# ============================================
+# CODE QUALITY
+# ============================================
+black>=23.12.0               # Code formatter
+flake8>=7.0.0                # Linting
+mypy>=1.7.0                  # Static type checking
+isort>=5.13.0                # Import sorting
+pylint>=3.0.0                # Code analysis
+
+# ============================================
+# DOCUMENTATION
+# ============================================
+sphinx>=7.2.0                # Documentation generator
+sphinx-rtd-theme>=2.0.0      # ReadTheDocs theme
+
+# ============================================
+# DEVELOPMENT
+# ============================================
+ipython>=8.18.0              # Enhanced Python shell
+ipdb>=0.13.13                # IPython debugger
+
+
+# ============================================
+# WEB SERVER (Added April 2, 2026)
+# ============================================
+fastapi>=0.104.0            # Web framework
+uvicorn[standard]>=0.24.0   # ASGI server
+python-jose[cryptography]>=3.3.0  # JWT tokens
+passlib[bcrypt]>=1.7.4      # Password hashing
+python-multipart>=0.0.6     # File uploads
