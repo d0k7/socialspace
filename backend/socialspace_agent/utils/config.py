@@ -295,6 +295,12 @@ class Settings(BaseSettings):
     reddit_client_secret: Optional[str] = None
     
     youtube_api_key: Optional[str] = None
+    tiktok_client_key: Optional[str] = None
+    tiktok_client_secret: Optional[str] = None
+    snapchat_client_id: Optional[str] = None
+    snapchat_client_secret: Optional[str] = None
+    pinterest_access_token: Optional[str] = None
+    pinterest_app_id: Optional[str] = None
     
     # ============================================
     # DATABASE
@@ -437,6 +443,18 @@ class Settings(BaseSettings):
             },
             "youtube": {
                 "api_key": self.youtube_api_key,
+            },
+            "tiktok": {
+                "api_key": self.tiktok_client_key,
+                "api_secret": self.tiktok_client_secret,
+            },
+            "snapchat": {
+                "api_key": self.snapchat_client_id,
+                "api_secret": self.snapchat_client_secret,
+            },
+            "pinterest": {
+                "access_token": self.pinterest_access_token,
+                "api_key": self.pinterest_app_id,
             },
         }
         

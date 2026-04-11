@@ -411,7 +411,7 @@ class TestSerialization:
     def test_message_to_dict(self, base_message_data):
         """Test converting message to dictionary."""
         msg = UnifiedMessage(**base_message_data)
-        msg_dict = msg.dict()
+        msg_dict = msg.model_dump()
         
         assert isinstance(msg_dict, dict)
         assert msg_dict['platform'] == 'whatsapp'
@@ -420,7 +420,7 @@ class TestSerialization:
     def test_message_to_json(self, base_message_data):
         """Test JSON serialization."""
         msg = UnifiedMessage(**base_message_data)
-        json_str = msg.json()
+        json_str = msg.model_dump_json()
         
         assert isinstance(json_str, str)
         assert 'whatsapp' in json_str
@@ -428,7 +428,7 @@ class TestSerialization:
     def test_message_from_dict(self, base_message_data):
         """Test creating message from dictionary."""
         msg1 = UnifiedMessage(**base_message_data)
-        msg_dict = msg1.dict()
+        msg_dict = msg1.model_dump()
         
         msg2 = UnifiedMessage(**msg_dict)
         
