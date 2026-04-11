@@ -38,7 +38,7 @@ import {
   Calendar,
   Clock,
 } from 'lucide-react';
-import api from '../../lib/api';
+import apiClient from '@/api/client';
 
 // ============================================================================
 // INTERFACES
@@ -161,7 +161,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({ onSave }) => {
       }
 
       // API call
-      await api.put('/user/profile', {
+      await apiClient.put('/user/profile', {
         name: profileData.name,
         email: profileData.email,
       });
@@ -225,7 +225,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({ onSave }) => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await api.post('/user/avatar', formData, {
+      const response = await apiClient.post('/user/avatar', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -280,7 +280,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({ onSave }) => {
       }
 
       // API call
-      await api.post('/user/change-password', {
+      await apiClient.post('/user/change-password', {
         currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword,
       });

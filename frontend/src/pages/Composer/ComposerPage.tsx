@@ -46,7 +46,7 @@ import {
   Hash,
   Smile,
 } from 'lucide-react';
-import api from '../../lib/api';
+import apiClient from '@/api/client';
 import { useToast } from '../../components/common/Toast';
 
 // ============================================================================
@@ -283,7 +283,7 @@ export const ComposerPage: React.FC = () => {
         formData.append(`media_${index}`, m.file);
       });
 
-      await api.post('/posts', formData, {
+      await apiClient.post('/posts', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

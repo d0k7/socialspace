@@ -38,7 +38,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
-import api from '../../lib/api';
+import apiClient from '@/api/client';
 
 // ============================================================================
 // INTERFACES
@@ -222,7 +222,7 @@ export const BillingSettings: React.FC<BillingSettingsProps> = ({ onSave }) => {
     setIsUpgrading(true);
 
     try {
-      await api.post('/billing/change-plan', { planId: plan.id });
+      await apiClient.post('/billing/change-plan', { planId: plan.id });
 
       alert(`Successfully upgraded to ${plan.name} plan!`);
       setShowUpgradeModal(false);
@@ -242,7 +242,7 @@ export const BillingSettings: React.FC<BillingSettingsProps> = ({ onSave }) => {
 
   const handleSetDefaultCard = async (cardId: string) => {
     try {
-      await api.post('/billing/set-default-payment', { paymentMethodId: cardId });
+      await apiClient.post('/billing/set-default-payment', { paymentMethodId: cardId });
 
       setPaymentMethods(prev =>
         prev.map(pm => ({
@@ -264,7 +264,7 @@ export const BillingSettings: React.FC<BillingSettingsProps> = ({ onSave }) => {
     }
 
     try {
-      await api.delete(`/billing/payment-methods/${cardId}`);
+      await apiClient.delete(`/billing/payment-methods/${cardId}`);
 
       setPaymentMethods(prev => prev.filter(pm => pm.id !== cardId));
 

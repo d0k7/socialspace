@@ -1,18 +1,21 @@
 /**
- * Theme Toggle Component - Icon Only (Compact)
+ * ThemeToggle - Light/Dark Mode Toggle
+ *
+ * WHY: Single canonical theme control using ThemeContext.
+ * System preference is handled automatically by ThemeContext on load.
+ * Removed useThemeStore (duplicate system) - canonical is ThemeContext.
  */
 
-import { Sun, Moon, Monitor } from 'lucide-react'
-import { useThemeStore } from '@/store/themeStore'
+import { Sun, Moon } from 'lucide-react'
+import { useTheme } from '../../contexts/ThemeContext'
 import { cn } from '@/lib/utils'
 
 export default function ThemeToggle() {
-  const { theme, setTheme } = useThemeStore()
+  const { theme, setTheme } = useTheme()
 
   const options = [
     { value: 'light' as const, icon: Sun, label: 'Light' },
     { value: 'dark' as const, icon: Moon, label: 'Dark' },
-    { value: 'system' as const, icon: Monitor, label: 'System' },
   ]
 
   return (

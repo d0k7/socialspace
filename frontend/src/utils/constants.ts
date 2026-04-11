@@ -86,7 +86,7 @@ export const ROUTES = {
  * Local Storage Keys
  */
 export const STORAGE_KEYS = {
-  AUTH_TOKEN: 'auth_token',
+  AUTH_TOKEN: 'access_token',
   USER: 'user',
   THEME: 'theme',
   PLATFORMS: 'platforms',

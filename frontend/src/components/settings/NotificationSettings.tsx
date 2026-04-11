@@ -44,7 +44,7 @@ import {
   AtSign,
   Zap,
 } from 'lucide-react';
-import api from '../../lib/api';
+import apiClient from '@/api/client';
 
 // ============================================================================
 // INTERFACES
@@ -218,7 +218,7 @@ export const NotificationSettings: React.FC<NotificationSettingsProps> = ({ onSa
     setSaveError(null);
 
     try {
-      await api.put('/user/notification-preferences', preferences);
+      await apiClient.put('/user/notification-preferences', preferences);
 
       setSaveSuccess(true);
       setHasChanges(false);

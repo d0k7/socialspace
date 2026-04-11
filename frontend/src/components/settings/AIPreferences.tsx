@@ -42,7 +42,7 @@ import {
   Wand2,
   Brain,
 } from 'lucide-react';
-import api from '../../lib/api';
+import apiClient from '@/api/client';
 
 // ============================================================================
 // INTERFACES
@@ -282,7 +282,7 @@ export const AIPreferences: React.FC<AIPreferencesProps> = ({ onSave }) => {
     setSaveError(null);
 
     try {
-      await api.put('/user/ai-preferences', settings);
+      await apiClient.put('/user/ai-preferences', settings);
 
       setSaveSuccess(true);
       setHasChanges(false);

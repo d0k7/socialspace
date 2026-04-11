@@ -39,7 +39,7 @@ import {
   LogOut,
   RefreshCw,
 } from 'lucide-react';
-import api from '../../lib/api';
+import apiClient from '@/api/client';
 
 // ============================================================================
 // INTERFACES
@@ -101,7 +101,7 @@ export const DangerZone: React.FC<DangerZoneProps> = ({ onAccountDeleted }) => {
     setIsExporting(true);
 
     try {
-      const response = await api.post('/user/export-data', exportData);
+      const response = await apiClient.post('/user/export-data', exportData);
       const { downloadUrl } = response.data;
 
       // Trigger download
@@ -155,7 +155,7 @@ export const DangerZone: React.FC<DangerZoneProps> = ({ onAccountDeleted }) => {
       setDeleteError(null);
 
       try {
-        await api.post('/user/delete-account', {
+        await apiClient.post('/user/delete-account', {
           password: deletePassword,
         });
 
@@ -214,7 +214,7 @@ export const DangerZone: React.FC<DangerZoneProps> = ({ onAccountDeleted }) => {
       if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
 
       // Clear API cache
-      await api.post('/user/clear-cache');
+      await apiClient.post('/user/clear-cache');
 
       alert('Cache cleared successfully!');
     } catch (error) {
@@ -237,7 +237,7 @@ export const DangerZone: React.FC<DangerZoneProps> = ({ onAccountDeleted }) => {
     setIsRevoking(true);
 
     try {
-      await api.post('/user/revoke-sessions');
+      await apiClient.post('/user/revoke-sessions');
 
       alert('All sessions revoked. You will be logged out.');
       

@@ -62,7 +62,7 @@ import {
 import { PlatformType, PLATFORMS, PLATFORM_NAMES } from '../../types/composer.types';
 
 // API
-import api from '../../api/client';
+import apiClient from '@/api/client';
 
 // ============================================================================
 // INTERFACES
@@ -117,7 +117,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({
         timePeriod: selectedPeriod,
       };
 
-      const response = await api.get('/analytics', { params: request });
+      const response = await apiClient.get('/analytics', { params: request });
       const data: GetAnalyticsResponse = response.data;
 
       setAnalyticsData(data);
@@ -155,7 +155,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({
         includeCharts: format === 'pdf',
       };
 
-      const response = await api.post('/analytics/export', request);
+      const response = await apiClient.post('/analytics/export', request);
       const { downloadUrl } = response.data;
 
       // Trigger download
