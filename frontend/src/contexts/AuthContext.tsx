@@ -38,7 +38,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsLoading(false);
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, _password: string) => {
     console.log('DEMO MODE: Logging in with', email);
     await new Promise(resolve => setTimeout(resolve, 500));
     
@@ -53,7 +53,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(demoUser);
   };
 
-  const register = async (name: string, email: string, password: string) => {
+  const register = async (name: string, email: string, _password: string) => {
     console.log('DEMO MODE: Registering user', name, email);
     await new Promise(resolve => setTimeout(resolve, 500));
     

@@ -5,7 +5,6 @@
  */
 
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
 import { Clock, CheckCircle2, AlertCircle, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/utils'

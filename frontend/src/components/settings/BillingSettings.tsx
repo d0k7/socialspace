@@ -31,20 +31,12 @@ import {
   Check,
   Zap,
   Calendar,
-  DollarSign,
   FileText,
-  TrendingUp,
-  Users,
-  MessageSquare,
-  BarChart3,
   Crown,
   Star,
-  AlertCircle,
   Loader2,
-  ExternalLink,
   Plus,
   Trash2,
-  Edit,
 } from 'lucide-react';
 import api from '../../lib/api';
 
@@ -173,7 +165,6 @@ export const BillingSettings: React.FC<BillingSettingsProps> = ({ onSave }) => {
 
   const [currentPlan] = useState<Plan>({ ...PLANS[1], current: true });
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([
     {
@@ -221,7 +212,7 @@ export const BillingSettings: React.FC<BillingSettingsProps> = ({ onSave }) => {
   });
 
   const [isUpgrading, setIsUpgrading] = useState(false);
-  const [showAddCard, setShowAddCard] = useState(false);
+  const [, setShowAddCard] = useState(false);
 
   // ============================================================================
   // HANDLERS

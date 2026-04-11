@@ -5,12 +5,12 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { 
+import {
   getMessages, 
   markMessageAsRead,
   markAllMessagesAsRead 
 } from '@/api/endpoints/messages'
-import { QUERY_KEYS } from '@/utils/constants'
+import { QUERY_KEYS, type Platform } from '@/utils/constants'
 import type { MessageFilter } from '@/types/message.types'
 import toast from 'react-hot-toast'
 
@@ -37,7 +37,7 @@ export function useMarkAllAsRead() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (platform?: string) => markAllMessagesAsRead(platform),
+    mutationFn: (platform?: string) => markAllMessagesAsRead(platform as Platform | undefined),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.MESSAGES] })
       toast.success('All messages marked as read')

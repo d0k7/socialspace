@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import PlatformCard from '@/components/platforms/PlatformCard'
 import ConnectionModal from '@/components/platforms/ConnectionModal'
-import { usePlatforms, useConnectPlatform, useDisconnectPlatform } from '@/hooks/usePlatforms'
+import { usePlatforms, useConnectPlatform } from '@/hooks/usePlatforms'
 import { PLATFORMS, PLATFORM_NAMES, type Platform } from '@/utils/constants'
 import { RefreshCw, Zap, CheckCircle2, XCircle, TrendingUp, AlertCircle } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -31,12 +31,10 @@ export default function PlatformsPage() {
   const [testingPlatform, setTestingPlatform] = useState<Platform | null>(null)
 
   // Fetch platforms
-  const { data: platforms = [], isLoading } = usePlatforms()
+  usePlatforms()
   
   // Mutations
   const connectMutation = useConnectPlatform()
-  const disconnectMutation = useDisconnectPlatform()
-
   // Mock platform states (will be replaced with real API data)
   const [platformStates, setPlatformStates] = useState<PlatformState[]>(
     Object.values(PLATFORMS).map(platform => ({
@@ -69,7 +67,7 @@ export default function PlatformsPage() {
     setShowConnectionModal(true)
   }
 
-  const handleConnectionSubmit = async (config: Record<string, string>) => {
+  const handleConnectionSubmit = async (_config: Record<string, string>) => {
     if (!selectedPlatform) return
 
     try {

@@ -44,7 +44,6 @@ import {
   PLATFORMS,
   PLATFORM_NAMES,
   PLATFORM_COLORS,
-  PLATFORM_LIMITS,
   getCharacterLimit,
 } from '../../types/composer.types';
 
@@ -133,12 +132,6 @@ const PlatformCard: React.FC<PlatformCardProps> = ({
     if (limitPercentage >= 95) return 'text-orange-500 dark:text-orange-400';
     if (limitPercentage >= 80) return 'text-yellow-500 dark:text-yellow-400';
     return 'text-green-500 dark:text-green-400';
-  };
-
-  // Get border color when selected
-  const getBorderColor = () => {
-    if (!isSelected) return 'border-gray-300 dark:border-gray-600';
-    return `border-[${PLATFORM_COLORS[platform]}]`;
   };
 
   return (

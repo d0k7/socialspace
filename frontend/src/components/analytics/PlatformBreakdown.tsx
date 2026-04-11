@@ -157,7 +157,6 @@ const CustomLabel: React.FC<CustomLabelProps> = ({
   innerRadius,
   outerRadius,
   percentage,
-  name,
 }) => {
   const RADIAN = Math.PI / 180;
   const radius = innerRadius + (outerRadius - innerRadius) * 0.5;

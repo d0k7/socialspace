@@ -46,7 +46,7 @@ import {
   formatPercentage,
   formatDateForDisplay,
 } from '../../types/analytics.types';
-import { PlatformType, PLATFORM_COLORS, PLATFORM_NAMES } from '../../types/composer.types';
+import { PLATFORM_COLORS, PLATFORM_NAMES } from '../../types/composer.types';
 
 // ============================================================================
 // INTERFACES
@@ -302,7 +302,6 @@ export const TopPosts: React.FC<TopPostsProps> = ({
   posts,
   maxPosts = 10,
   sortBy = 'totalEngagement',
-  showMetrics = ['likes', 'comments', 'shares', 'views', 'clicks', 'saves'],
   onPostClick,
   loading = false,
 }) => {

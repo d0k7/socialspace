@@ -142,7 +142,7 @@ export const EngagementChart: React.FC<EngagementChartProps> = ({
   // ============================================================================
 
   const [selectedMetrics, setSelectedMetrics] = useState<(keyof EngagementMetrics)[]>(metrics);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<PlatformType[] | undefined>(platforms);
+  const [selectedPlatforms] = useState<PlatformType[] | undefined>(platforms);
   const [currentChartType, setCurrentChartType] = useState<'line' | 'area'>(chartType);
 
   // ============================================================================
@@ -171,7 +171,7 @@ export const EngagementChart: React.FC<EngagementChartProps> = ({
         key = 'total';
       }
 
-      acc[date][key] = (acc[date][key] || 0) + point.value;
+      acc[date][key] = ((acc[date][key] as number) || 0) + point.value;
       return acc;
     }, {} as Record<string, ChartDataPoint>);
 
@@ -517,10 +517,14 @@ export const EngagementChart: React.FC<EngagementChartProps> = ({
               />
             )}
 
-            {dataKeys.map(key => {
+{dataKeys.map(key => {
               const color = getColorForKey(key);
+              // WHY: TypeScript cannot verify dynamically-assigned recharts components
+              // satisfy JSX construct signatures at compile time. The cast is safe here
+              // because DataComponent is always Area, Line, or Bar — all valid JSX.
+              const DC = DataComponent as React.ComponentType<Record<string, unknown>>;
               return (
-                <DataComponent
+                <DC
                   key={key}
                   type="monotone"
                   dataKey={key}

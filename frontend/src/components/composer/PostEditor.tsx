@@ -69,11 +69,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   // STATE
   // ============================================================================
 
-  const [isFocused, setIsFocused] = useState(false);
-  const [selection, setSelection] = useState<{
-    start: number;
-    end: number;
-  } | null>(null);
+  const [, setIsFocused] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isSaving, setIsSaving] = useState(false);

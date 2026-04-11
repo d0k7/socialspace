@@ -6,9 +6,8 @@
 
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { PLATFORMS, PLATFORM_NAMES, PLATFORM_COLORS } from '@/utils/constants'
+import { PLATFORMS, PLATFORM_NAMES, PLATFORM_COLORS, type Platform as PlatformKey } from '@/utils/constants'
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 
 interface Platform {
   name: string
@@ -72,15 +71,15 @@ export default function PlatformStatus({ platforms, loading }: PlatformStatusPro
               <div className="flex items-center gap-3 flex-1">
                 <div
                   className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm"
-                  style={{ backgroundColor: PLATFORM_COLORS[platform.name] || '#6B7280' }}
+                  style={{ backgroundColor: PLATFORM_COLORS[platform.name as PlatformKey] || '#6B7280' }}
                 >
-                  {PLATFORM_NAMES[platform.name]?.[0] || '?'}
+                  {PLATFORM_NAMES[platform.name as PlatformKey]?.[0] || '?'}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     {getStatusIcon(platform.status)}
                     <span className="font-medium text-gray-900 dark:text-white">
-                      {PLATFORM_NAMES[platform.name] || platform.name}
+                      {PLATFORM_NAMES[platform.name as PlatformKey] || platform.name}
                     </span>
                   </div>
                   {platform.messageCount !== undefined && (

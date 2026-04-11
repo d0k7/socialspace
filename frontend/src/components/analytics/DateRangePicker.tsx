@@ -35,7 +35,6 @@ import {
 import {
   TimePeriod,
   DateRange,
-  TIME_PERIOD_LABELS,
   getDateRangeForPeriod,
   formatDateForDisplay,
 } from '../../types/analytics.types';

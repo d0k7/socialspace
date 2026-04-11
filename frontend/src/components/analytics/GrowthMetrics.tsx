@@ -50,7 +50,6 @@ import {
 import {
   FollowerGrowth,
   AudienceInsights,
-  TimeSeriesDataPoint,
   formatNumber,
   formatPercentage,
   formatDateForDisplay,

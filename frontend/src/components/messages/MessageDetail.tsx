@@ -58,7 +58,7 @@ export default function MessageDetail({ message, onReply, replying, showReply = 
     return (
       <Card className="h-full flex items-center justify-center">
         <EmptyState
-          icon={MessageSquare}
+          icon={<MessageSquare className="w-8 h-8 text-gray-400 dark:text-gray-600" />}
           title="No message selected"
           description="Select a message from the list to view details"
         />

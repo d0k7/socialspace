@@ -27,7 +27,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard,
   FileText,
   TrendingUp,
   Users,
@@ -46,8 +45,6 @@ import {
   BarChart3,
   Loader2,
 } from 'lucide-react';
-import api from '../../lib/api';
-import { useToast } from '../../components/common/Toast';
 
 // ============================================================================
 // INTERFACES
@@ -99,7 +96,6 @@ interface PlatformHealth {
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const toast = useToast();
 
   // ============================================================================
   // STATE

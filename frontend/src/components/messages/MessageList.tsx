@@ -190,7 +190,7 @@ export default function MessageList({
       {/* Message List */}
       {filteredMessages.length === 0 ? (
         <EmptyState
-          icon={MessageSquare}
+          icon={<MessageSquare className="w-8 h-8 text-gray-400 dark:text-gray-600" />}
           title={searchQuery ? 'No messages found' : 'No messages yet'}
           description={
             searchQuery

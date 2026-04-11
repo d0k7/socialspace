@@ -31,7 +31,6 @@ import {
   AlertCircle,
   Loader2,
   CheckCircle2,
-  File,
 } from 'lucide-react';
 import {
   MediaFile,
@@ -40,7 +39,6 @@ import {
   ALLOWED_IMAGE_TYPES,
   ALLOWED_VIDEO_TYPES,
   formatFileSize,
-  isValidFileType,
   generateId,
 } from '../../types/composer.types';
 

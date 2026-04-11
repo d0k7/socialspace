@@ -15,7 +15,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts'
-import { PLATFORM_COLORS, PLATFORM_NAMES } from '@/utils/constants'
+import { PLATFORM_COLORS, PLATFORM_NAMES, type Platform } from '@/utils/constants'
 
 interface PlatformChartProps {
   data?: Array<{
@@ -46,7 +46,7 @@ export default function PlatformChart({ data }: PlatformChartProps) {
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis 
                 dataKey="platform"
-                tickFormatter={(value) => PLATFORM_NAMES[value] || value}
+                tickFormatter={(value) => PLATFORM_NAMES[value as Platform] || value}
                 className="text-xs text-gray-600 dark:text-gray-400"
               />
               <YAxis className="text-xs text-gray-600 dark:text-gray-400" />
@@ -56,11 +56,11 @@ export default function PlatformChart({ data }: PlatformChartProps) {
                   border: '1px solid #e5e7eb',
                   borderRadius: '8px',
                 }}
-                labelFormatter={(value) => PLATFORM_NAMES[value] || value}
+                labelFormatter={(value) => PLATFORM_NAMES[value as Platform] || value}
               />
               <Bar dataKey="messages" radius={[8, 8, 0, 0]}>
                 {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={PLATFORM_COLORS[entry.platform] || '#6B7280'} />
+                  <Cell key={`cell-${index}`} fill={PLATFORM_COLORS[entry.platform as Platform] || '#6B7280'} />
                 ))}
               </Bar>
             </BarChart>

@@ -22,7 +22,7 @@
  * - Expandable/collapsible sections
  */
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   Twitter,
   Linkedin,
@@ -109,7 +109,6 @@ const formatContent = (content: string): React.ReactNode => {
   return lines.map((line, lineIndex) => {
     // Process inline formatting
     const parts: React.ReactNode[] = [];
-    let currentText = line;
     let key = 0;
 
     // Process **bold**
@@ -172,7 +171,6 @@ const TwitterPreview: React.FC<PlatformPreviewProps> = ({
   content,
   media,
   userName,
-  userAvatar,
 }) => {
   const { text, isTruncated } = getTruncatedContent(content, 'twitter');
 
@@ -261,7 +259,6 @@ const LinkedInPreview: React.FC<PlatformPreviewProps> = ({
   content,
   media,
   userName,
-  userAvatar,
 }) => {
   const { text, isTruncated } = getTruncatedContent(content, 'linkedin');
 
@@ -335,7 +332,6 @@ const InstagramPreview: React.FC<PlatformPreviewProps> = ({
   content,
   media,
   userName,
-  userAvatar,
 }) => {
   const { text, isTruncated } = getTruncatedContent(content, 'instagram');
 
@@ -418,7 +414,6 @@ const FacebookPreview: React.FC<PlatformPreviewProps> = ({
   content,
   media,
   userName,
-  userAvatar,
 }) => {
   const { text, isTruncated } = getTruncatedContent(content, 'facebook');
 

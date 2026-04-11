@@ -30,7 +30,6 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Send,
-  Save,
   X,
   CheckCircle2,
   AlertCircle,
@@ -53,7 +52,6 @@ import {
   MediaFile,
   ComposerFormData,
   CreatePostRequest,
-  CreatePostResponse,
   exceedsAnyLimit,
 } from '../../types/composer.types';
 
@@ -235,14 +233,11 @@ export const ComposerPage: React.FC<ComposerPageProps> = ({
       };
 
       // Submit post
-      let response;
       if (mode === 'edit' && postId) {
-        response = await api.put(`/posts/${postId}`, request);
+        await api.put(`/posts/${postId}`, request);
       } else {
-        response = await api.post('/posts', request);
+        await api.post('/posts', request);
       }
-
-      const data: CreatePostResponse = response.data;
 
       // Success!
       setSubmitSuccess(true);

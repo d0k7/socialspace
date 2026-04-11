@@ -30,21 +30,17 @@
  * - Preview post
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  FileText,
   Image as ImageIcon,
   Calendar,
   Send,
   Save,
   Sparkles,
-  X,
-  Clock,
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Plus,
   Trash2,
   Eye,
   Hash,
@@ -160,7 +156,7 @@ export const ComposerPage: React.FC = () => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [showAISuggestions, setShowAISuggestions] = useState(false);
+  const [, setShowAISuggestions] = useState(false);
 
   const [errors, setErrors] = useState<string[]>([]);
 

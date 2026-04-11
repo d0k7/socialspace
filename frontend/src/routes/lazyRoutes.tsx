@@ -9,14 +9,6 @@
 import { lazy, Suspense, ComponentType } from 'react';
 import { DashboardSkeleton } from '../components/common/LoadingSkeleton';
 
-// ============================================================================
-// LAZY LOAD WRAPPER
-// ============================================================================
-
-interface LazyLoadProps {
-  loadingComponent?: React.ReactNode;
-}
-
 export const lazyLoad = <T extends ComponentType<any>>(
   importFunc: () => Promise<{ default: T }>,
   fallback?: React.ReactNode

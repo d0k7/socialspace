@@ -362,7 +362,7 @@ export const formatDateForAPI = (date: Date): string => {
  */
 export const groupByTimeInterval = (
   data: TimeSeriesDataPoint[],
-  interval: 'hour' | 'day' | 'week' | 'month'
+  _interval: 'hour' | 'day' | 'week' | 'month'
 ): TimeSeriesDataPoint[] => {
   // Simplified implementation - would need proper grouping logic
   return data;

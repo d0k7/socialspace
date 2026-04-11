@@ -28,7 +28,6 @@ import {
   Download,
   Trash2,
   AlertTriangle,
-  Lock,
   Eye,
   EyeOff,
   Loader2,

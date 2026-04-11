@@ -85,7 +85,7 @@ export const MainLayout: React.FC = () => {
                   }`
                 }
               >
-                {({ isActive }) => (
+                {() => (
                   <>
                     <item.icon className="w-5 h-5" />
                     <span>{item.name}</span>

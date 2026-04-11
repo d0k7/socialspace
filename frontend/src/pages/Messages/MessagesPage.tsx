@@ -17,9 +17,9 @@ import { Badge } from '@/components/ui/Badge'
 import MessageList from '@/components/messages/MessageList'
 import MessageDetail from '@/components/messages/MessageDetail'
 import MessageComposer from '@/components/messages/MessageComposer'
-import { useMessages, useMarkAsRead } from '@/hooks/useMessages'
+import { useMessages } from '@/hooks/useMessages'
 import type { Message } from '@/types/message.types'
-import { RefreshCw, Inbox, CheckCheck, Archive, Trash2, AlertCircle } from 'lucide-react'
+import { RefreshCw, Inbox, CheckCheck, Trash2, AlertCircle } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { PLATFORM_NAMES } from '@/utils/constants'
 import toast from 'react-hot-toast'
@@ -37,10 +37,7 @@ export default function MessagesPage() {
   const [messages, setMessages] = useState<Message[]>([])
 
   // Fetch messages
-  const { data: apiMessages = [], isLoading } = useMessages()
-  
-  // Mutations
-  const markAsReadMutation = useMarkAsRead()
+  const { isLoading } = useMessages()
 
   // Initialize mock messages
   useEffect(() => {
@@ -316,7 +313,7 @@ export default function MessagesPage() {
     }
   }
 
-  const handleReply = async (content: string) => {
+  const handleReply = async (_content: string) => {
     if (!selectedMessage) return
 
     setIsReplying(true)
@@ -469,7 +466,7 @@ export default function MessagesPage() {
       {/* Tab Content */}
       {activeTab === 'compose' ? (
         <MessageComposer
-          onSend={(platform, content) => {
+          onSend={(platform, _content) => {
             toast.success(`Message sent to ${PLATFORM_NAMES[platform]}!`)
             setActiveTab('inbox')
           }}

@@ -23,14 +23,12 @@
  * - Last login info
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   User,
   Mail,
   Lock,
-  Upload,
   Check,
-  X,
   AlertCircle,
   Eye,
   EyeOff,
