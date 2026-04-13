@@ -1,10 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import apiClient from '@/api/client';
+
+// ============================================================================
+// TYPES
+// ============================================================================
 
 interface User {
   id: string;
   email: string;
   name: string;
-  avatar?: string;
+  is_active: boolean;
+  is_verified: boolean;
+  created_at: string;
 }
 
 interface AuthContextType {
@@ -13,8 +20,23 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
+
+// ============================================================================
+// STORAGE KEYS — single source of truth
+// WHY: Prevents key drift across files (was the #1 auth bug before)
+// ============================================================================
+
+const KEYS = {
+  ACCESS_TOKEN: 'access_token',
+  REFRESH_TOKEN: 'refresh_token',
+  USER: 'auth_user',
+} as const;
+
+// ============================================================================
+// CONTEXT
+// ============================================================================
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -26,58 +48,104 @@ export const useAuth = () => {
   return context;
 };
 
+// ============================================================================
+// PROVIDER
+// ============================================================================
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // --------------------------------------------------------------------------
+  // RESTORE SESSION ON LOAD
+  // WHY: On app load, check if a valid token exists and restore the user
+  // session without forcing re-login. Calls /api/auth/me to verify the
+  // token is still valid server-side (not expired, user still active).
+  // --------------------------------------------------------------------------
   useEffect(() => {
-    const storedUser = localStorage.getItem('demo_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    const restoreSession = async () => {
+      const token = localStorage.getItem(KEYS.ACCESS_TOKEN);
+
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await apiClient.get('/api/auth/me');
+        setUser(response.data);
+      } catch {
+        // Token invalid or expired — clear everything cleanly
+        localStorage.removeItem(KEYS.ACCESS_TOKEN);
+        localStorage.removeItem(KEYS.REFRESH_TOKEN);
+        localStorage.removeItem(KEYS.USER);
+        setUser(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    restoreSession();
   }, []);
 
-  const login = async (email: string, _password: string) => {
-    console.log('DEMO MODE: Logging in with', email);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const demoUser: User = {
-      id: 'demo-123',
-      email: email,
-      name: email.split('@')[0],
-    };
-    
-    localStorage.setItem('access_token', 'demo-token');
-    localStorage.setItem('demo_user', JSON.stringify(demoUser));
-    setUser(demoUser);
+  // --------------------------------------------------------------------------
+  // LOGIN
+  // --------------------------------------------------------------------------
+  const login = async (email: string, password: string): Promise<void> => {
+    const response = await apiClient.post('/api/auth/login', { email, password });
+    const { access_token, refresh_token, user: userData } = response.data;
+
+    localStorage.setItem(KEYS.ACCESS_TOKEN, access_token);
+    localStorage.setItem(KEYS.REFRESH_TOKEN, refresh_token);
+    localStorage.setItem(KEYS.USER, JSON.stringify(userData));
+
+    setUser(userData);
   };
 
-  const register = async (name: string, email: string, _password: string) => {
-    console.log('DEMO MODE: Registering user', name, email);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const demoUser: User = {
-      id: 'demo-123',
-      email: email,
-      name: name,
-    };
-    
-    localStorage.setItem('access_token', 'demo-token');
-    localStorage.setItem('demo_user', JSON.stringify(demoUser));
-    setUser(demoUser);
+  // --------------------------------------------------------------------------
+  // REGISTER
+  // --------------------------------------------------------------------------
+  const register = async (name: string, email: string, password: string): Promise<void> => {
+    const response = await apiClient.post('/api/auth/register', { name, email, password });
+    const { access_token, refresh_token, user: userData } = response.data;
+
+    localStorage.setItem(KEYS.ACCESS_TOKEN, access_token);
+    localStorage.setItem(KEYS.REFRESH_TOKEN, refresh_token);
+    localStorage.setItem(KEYS.USER, JSON.stringify(userData));
+
+    setUser(userData);
   };
 
-  const logout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('demo_user');
-    setUser(null);
+  // --------------------------------------------------------------------------
+  // LOGOUT
+  // WHY async: Calls backend logout endpoint so server can log the event.
+  // Clears local state regardless of whether the backend call succeeds —
+  // the user must always be able to log out even if the server is down.
+  // --------------------------------------------------------------------------
+  const logout = async (): Promise<void> => {
+    try {
+      await apiClient.post('/api/auth/logout');
+    } catch {
+      // Intentionally swallowed — local logout must always succeed
+    } finally {
+      localStorage.removeItem(KEYS.ACCESS_TOKEN);
+      localStorage.removeItem(KEYS.REFRESH_TOKEN);
+      localStorage.removeItem(KEYS.USER);
+      setUser(null);
+    }
   };
-
-  const isAuthenticated = !!user;
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated: !!user,
+        isLoading,
+        login,
+        register,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

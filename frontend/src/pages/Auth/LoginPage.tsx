@@ -27,7 +27,7 @@ export const LoginPage: React.FC = () => {
         throw new Error('Password is required');
       }
 
-      // Login (uses demo mode from AuthContext)
+      // Login via real backend JWT auth
       await login(email, password);
       
       setSuccess(true);
@@ -39,7 +39,7 @@ export const LoginPage: React.FC = () => {
 
     } catch (err: any) {
       console.error('Login error:', err);
-      setError(err.message || 'Login failed. Please try again.');
+      setError(err.response?.data?.detail || err.message || 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -54,13 +54,6 @@ export const LoginPage: React.FC = () => {
           </h1>
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Welcome back! Manage your social media in one place.
-          </p>
-        </div>
-
-        {/* Demo Mode Banner */}
-        <div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-          <p className="text-sm text-blue-700 dark:text-blue-300">
-            <strong>Demo Mode:</strong> Use any email/password to login!
           </p>
         </div>
 

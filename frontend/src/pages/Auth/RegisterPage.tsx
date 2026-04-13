@@ -27,11 +27,14 @@ export const RegisterPage: React.FC = () => {
       if (!email.trim()) {
         throw new Error('Email is required');
       }
-      if (!password || password.length < 6) {
-        throw new Error('Password must be at least 6 characters');
+      if (!password || password.length < 8) {
+        throw new Error('Password must be at least 8 characters');
+      }
+      if (!/\d/.test(password)) {
+        throw new Error('Password must contain at least one number');
       }
 
-      // Register (uses demo mode from AuthContext)
+      // Register via real backend — creates user in PostgreSQL
       await register(name, email, password);
       
       setSuccess(true);
@@ -43,7 +46,7 @@ export const RegisterPage: React.FC = () => {
 
     } catch (err: any) {
       console.error('Registration error:', err);
-      setError(err.message || 'Registration failed. Please try again.');
+      setError(err.response?.data?.detail || err.message || 'Registration failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -58,13 +61,6 @@ export const RegisterPage: React.FC = () => {
           </h1>
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Join SocialSpace and start managing your social media
-          </p>
-        </div>
-
-        {/* Demo Mode Banner */}
-        <div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-          <p className="text-sm text-blue-700 dark:text-blue-300">
-            <strong>Demo Mode:</strong> No backend needed - just enter any details!
           </p>
         </div>
 
@@ -126,7 +122,7 @@ export const RegisterPage: React.FC = () => {
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Minimum 6 characters
+              Minimum 8 characters, must include a number
             </p>
           </div>
 
