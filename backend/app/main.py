@@ -11,6 +11,7 @@ Phase: Foundation - FastAPI Web Server
 """
 
 from fastapi import FastAPI
+from app.routers import auth as auth_router
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
@@ -30,6 +31,8 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+app.include_router(auth_router.router)
 
 # CORS Configuration
 # WHY: Frontend (React) runs on different port (3000/5173)

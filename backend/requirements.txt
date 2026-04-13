@@ -120,4 +120,5 @@ fastapi>=0.104.0            # Web framework
 uvicorn[standard]>=0.24.0   # ASGI server
 python-jose[cryptography]>=3.3.0  # JWT tokens
 passlib[bcrypt]>=1.7.4      # Password hashing
+bcrypt<4.0.0                # Passlib compatibility on Windows
 python-multipart>=0.0.6     # File uploads
