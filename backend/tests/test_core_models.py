@@ -141,10 +141,11 @@ class TestPlatformSupport:
     """Test all 12 platforms are supported."""
     
     @pytest.mark.parametrize("platform", [
+        # WHY: 12 platforms only - WeChat excluded due to Chinese business
+        # registration requirement and severely restricted API for non-Chinese entities.
         PlatformType.WHATSAPP,
         PlatformType.TELEGRAM,
         PlatformType.DISCORD,
-        PlatformType.WECHAT,
         PlatformType.FACEBOOK,
         PlatformType.INSTAGRAM,
         PlatformType.SNAPCHAT,

@@ -56,10 +56,11 @@ class PlatformType(str, Enum):
     - Discussion platforms: Threaded discussions, communities
     """
     # Messaging platforms
+    # WHY: WeChat excluded - requires Chinese business registration and has
+    # severely restricted API access for non-Chinese entities. 12 platforms total.
     WHATSAPP = "whatsapp"
     TELEGRAM = "telegram"
     DISCORD = "discord"
-    WECHAT = "wechat"
     
     # Social networking platforms
     FACEBOOK = "facebook"
