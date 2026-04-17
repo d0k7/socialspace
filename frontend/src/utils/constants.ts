@@ -87,6 +87,10 @@ export const ROUTES = {
  */
 export const STORAGE_KEYS = {
   AUTH_TOKEN: 'access_token',
+  // WHY: 'refresh_token' matches the key written by AuthContext.tsx KEYS.REFRESH_TOKEN.
+  // Centralizing here so api/client.ts and AuthContext.tsx both read from one source of truth
+  // instead of each hardcoding the string independently.
+  REFRESH_TOKEN: 'refresh_token',
   USER: 'user',
   THEME: 'theme',
   PLATFORMS: 'platforms',
