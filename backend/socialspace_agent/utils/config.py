@@ -279,6 +279,17 @@ class Settings(BaseSettings):
     twitter_api_key: Optional[str] = None
     twitter_api_secret: Optional[str] = None
     twitter_bearer_token: Optional[str] = None
+    # WHY: OAuth 2.0 PKCE uses Client ID/Secret — separate from the API Key/Secret
+    # which are OAuth 1.0a credentials. Both sets coexist because the Twitter API
+    # supports both auth flows for different endpoints.
+    twitter_client_id: Optional[str] = None
+    twitter_client_secret: Optional[str] = None
+    twitter_redirect_uri: Optional[str] = Field(
+        default="http://localhost:8000/api/auth/twitter/callback",
+        description="OAuth 2.0 callback URL — must match Twitter Developer Portal exactly"
+    )
+    
+    
     
     facebook_app_id: Optional[str] = None
     facebook_app_secret: Optional[str] = None
@@ -370,7 +381,14 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=False  # Allow lowercase env vars
+        case_sensitive=False,  # Allow lowercase env vars
+        # WHY extra="ignore": The .env file contains fields used by other
+        # parts of the app (SECRET_KEY, FRONTEND_URL, etc.) that are not
+        # defined in this Settings class. Pydantic v2 BaseSettings defaults
+        # to rejecting unknown fields. "ignore" lets them pass through
+        # without validation errors - they are consumed by app/auth/security.py
+        # directly via os.getenv, not through this class.
+        extra="ignore"
     )
         
     def __init__(self, **kwargs):
@@ -418,9 +436,16 @@ class Settings(BaseSettings):
                 "api_key": self.telegram_bot_token,
             },
             "twitter": {
-                "api_key": self.twitter_api_key,
-                "api_secret": self.twitter_api_secret,
+                "api_key": self.twitter_client_id,
+                "api_secret": self.twitter_client_secret,
                 "access_token": self.twitter_bearer_token,
+                "metadata": {
+                    "client_id": self.twitter_client_id,
+                    "client_secret": self.twitter_client_secret,
+                    "redirect_uri": self.twitter_redirect_uri,
+                    "api_key": self.twitter_api_key,
+                    "api_secret": self.twitter_api_secret,
+                }
             },
             "facebook": {
                 "api_key": self.facebook_app_id,
