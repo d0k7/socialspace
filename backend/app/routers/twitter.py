@@ -47,6 +47,7 @@ from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -595,3 +596,223 @@ async def twitter_disconnect(
     )
 
     return {"disconnected": True}
+
+
+# ============================================================================
+# TWEET POSTING
+# ============================================================================
+
+class TweetRequest(BaseModel):
+    """
+    Request body for posting a tweet.
+
+    WHY content length validation here not just in Twitter API:
+    Twitter's 280 char limit should be enforced server-side before making
+    an outbound API call. Catching it here gives a clean 422 response
+    instead of a confusing Twitter API error.
+    """
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=280,
+        description="Tweet text content (1-280 characters)"
+    )
+
+
+class TweetResponse(BaseModel):
+    """
+    Response after successfully posting a tweet.
+
+    WHY return tweet_id and tweet_url:
+    Frontend needs tweet_id to link to the live tweet.
+    tweet_url is pre-constructed so frontend does not need to know
+    Twitter's URL format.
+    """
+    tweet_id: str
+    tweet_url: str
+    content: str
+    posted_at: str  # ISO 8601 UTC
+
+
+@router.post("/tweet", response_model=TweetResponse)
+async def post_tweet(
+    request: TweetRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+) -> TweetResponse:
+    """
+    Post a tweet to the authenticated user's connected Twitter account.
+
+    WHY this endpoint exists:
+    This is the core SocialSpace action - taking content and publishing it
+    to a real platform. Everything before this was infrastructure. This is
+    the product.
+
+    Flow:
+        1. Load the user's Twitter PlatformConnection from DB
+        2. Extract access_token from the stored tokens JSON
+        3. Call Twitter API v2 POST /2/tweets with Bearer token
+        4. Return tweet_id and URL for frontend confirmation
+
+    Args:
+        request: TweetRequest with content (1-280 chars)
+        current_user: Authenticated SocialSpace user
+        db: Async database session
+
+    Returns:
+        TweetResponse with tweet_id, tweet_url, content, posted_at
+
+    Raises:
+        HTTPException 404: No active Twitter connection for this user
+        HTTPException 400: Twitter API rejected the tweet (duplicate, policy, etc.)
+        HTTPException 500: Network error or unexpected Twitter API failure
+    """
+    # -------------------------------------------------------------------------
+    # Load Twitter connection from DB
+    # WHY check is_active: User may have disconnected Twitter since last post.
+    # Active check prevents using revoked tokens.
+    # -------------------------------------------------------------------------
+    result = await db.execute(
+        select(PlatformConnection).where(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == "twitter",
+            PlatformConnection.is_active == True,
+        )
+    )
+    connection = result.scalar_one_or_none()
+
+    if not connection:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active Twitter connection found. Connect your Twitter account first.",
+        )
+
+    # -------------------------------------------------------------------------
+    # Extract access token
+    # WHY validate token exists: The tokens JSON could theoretically be empty
+    # if a previous disconnect partially cleared it. Explicit check gives a
+    # clear error instead of a 401 from Twitter with no explanation.
+    # -------------------------------------------------------------------------
+    access_token = connection.tokens.get("access_token")
+    if not access_token:
+        logger.error(
+            "Twitter connection for user %s has no access_token in tokens JSON",
+            current_user.id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Twitter connection is corrupted. Please disconnect and reconnect your Twitter account.",
+        )
+
+    # -------------------------------------------------------------------------
+    # Post tweet via Twitter API v2
+    # WHY POST /2/tweets not v1.1: Twitter API v2 is the current supported
+    # version. v1.1 is deprecated and requires OAuth 1.0a which we do not use.
+    # WHY text field not status: API v2 uses "text" not "status" (v1.1 name).
+    # -------------------------------------------------------------------------
+    twitter_api_url = "https://api.twitter.com/2/tweets"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                twitter_api_url,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                json={"text": request.content},
+            )
+
+            # ----------------------------------------------------------------
+            # Handle Twitter API error responses
+            # WHY check status explicitly: httpx does not raise on 4xx/5xx
+            # by default. We need to parse Twitter's error body for context.
+            # ----------------------------------------------------------------
+            if response.status_code == 401:
+                logger.error(
+                    "Twitter API returned 401 for user %s - token may be expired or revoked",
+                    current_user.id,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Twitter access token is expired or revoked. Please reconnect your Twitter account.",
+                )
+
+            if response.status_code == 403:
+                error_body = response.json()
+                logger.error(
+                    "Twitter API returned 403 for user %s: %s",
+                    current_user.id,
+                    error_body,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Twitter rejected this tweet: {error_body.get('detail', 'Policy violation or duplicate content')}",
+                )
+
+            if response.status_code == 429:
+                logger.error(
+                    "Twitter API rate limit hit for user %s",
+                    current_user.id,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Twitter rate limit reached. Please wait before posting again.",
+                )
+
+            if response.status_code not in (200, 201):
+                error_body = response.text
+                logger.error(
+                    "Twitter API unexpected status %d for user %s: %s",
+                    response.status_code,
+                    current_user.id,
+                    error_body,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Twitter API returned unexpected status {response.status_code}",
+                )
+
+            tweet_data = response.json()
+            tweet_id = tweet_data["data"]["id"]
+            username = connection.platform_username
+            posted_at = datetime.now(timezone.utc).isoformat()
+            tweet_url = f"https://twitter.com/{username}/status/{tweet_id}"
+
+    except httpx.TimeoutException:
+        logger.error("Twitter API timed out for user %s", current_user.id)
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Twitter API request timed out. Please try again.",
+        )
+    except httpx.RequestError as exc:
+        logger.error(
+            "Twitter API network error for user %s: %s",
+            current_user.id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Network error reaching Twitter API. Please try again.",
+        )
+
+    # -------------------------------------------------------------------------
+    # Update last_used_at on the connection
+    # WHY: Tracks when this connection was last actively used. Useful for
+    # identifying stale connections that have not posted in months.
+    # -------------------------------------------------------------------------
+    connection.last_used_at = datetime.now(timezone.utc)
+
+    logger.info(
+        "Tweet posted successfully for user %s (@%s) - tweet_id: %s",
+        current_user.id,
+        username,
+        tweet_id,
+    )
+
+    return TweetResponse(
+        tweet_id=tweet_id,
+        tweet_url=tweet_url,
+        content=request.content,
+        posted_at=posted_at,
+    )
