@@ -13,6 +13,7 @@ Phase: Foundation - FastAPI Web Server
 from fastapi import FastAPI
 from app.routers import auth as auth_router
 from app.routers import twitter as twitter_router
+from app.routers import telegram as telegram_router
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
@@ -35,6 +36,7 @@ app = FastAPI(
 
 app.include_router(auth_router.router)
 app.include_router(twitter_router.router)
+app.include_router(telegram_router.router)
 
 # CORS Configuration
 # WHY: Frontend (React) runs on different port (3000/5173)
