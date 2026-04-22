@@ -53,7 +53,10 @@ import { useToast } from '../../components/common/Toast';
 // INTERFACES
 // ============================================================================
 
-type PlatformType = 'twitter' | 'facebook' | 'instagram' | 'linkedin' | 'tiktok' | 'youtube';
+// WHY: telegram and discord are the currently working free posting platforms.
+// Twitter/LinkedIn/etc remain in the type for future implementation but
+// are marked disabled in PLATFORMS config until their APIs are available.
+type PlatformType = 'twitter' | 'facebook' | 'instagram' | 'linkedin' | 'tiktok' | 'youtube' | 'telegram' | 'discord';
 
 interface Platform {
   id: PlatformType;
@@ -84,11 +87,39 @@ interface PostDraft {
 
 const PLATFORMS: Platform[] = [
   {
+    // WHY enabled: Telegram Bot API is free and fully working in Phase 2.
+    id: 'telegram',
+    name: 'Telegram',
+    icon: '✈',
+    characterLimit: 4096,
+    color: 'bg-sky-500 text-white',
+    enabled: true,
+  },
+  {
+    // WHY enabled: Discord Bot API is free and fully working in Phase 2.
+    id: 'discord',
+    name: 'Discord',
+    icon: '💬',
+    characterLimit: 2000,
+    color: 'bg-indigo-600 text-white',
+    enabled: true,
+  },
+  {
+    // WHY disabled: Twitter API requires $100/mo paid tier for posting.
     id: 'twitter',
     name: 'Twitter',
     icon: '𝕏',
     characterLimit: 280,
     color: 'bg-black text-white',
+    enabled: false,
+  },
+  {
+    // WHY disabled: LinkedIn requires Company Page with admin access for posting API.
+    id: 'linkedin',
+    name: 'LinkedIn',
+    icon: 'in',
+    characterLimit: 3000,
+    color: 'bg-blue-700 text-white',
     enabled: false,
   },
   {
@@ -105,14 +136,6 @@ const PLATFORMS: Platform[] = [
     icon: '📷',
     characterLimit: 2200,
     color: 'bg-gradient-to-tr from-purple-600 via-pink-600 to-orange-500 text-white',
-    enabled: false,
-  },
-  {
-    id: 'linkedin',
-    name: 'LinkedIn',
-    icon: 'in',
-    characterLimit: 3000,
-    color: 'bg-blue-700 text-white',
     enabled: false,
   },
   {
@@ -268,43 +291,77 @@ export const ComposerPage: React.FC = () => {
 
     setIsPublishing(true);
 
+    // -------------------------------------------------------------------------
+    // WHY Promise.allSettled not Promise.all:
+    // We want to post to ALL selected platforms even if one fails.
+    // Promise.all would abort everything on the first failure.
+    // allSettled lets Telegram succeed even if Discord fails, and we report
+    // per-platform results to the user so they know exactly what happened.
+    // -------------------------------------------------------------------------
     try {
-      const formData = new FormData();
-      formData.append('content', content);
-      formData.append('platforms', JSON.stringify(selectedPlatforms));
+      // Map each selected platform to its real API call
+      const platformResults = await Promise.allSettled(
+        selectedPlatforms.map(async (platform) => {
+          if (platform === 'telegram') {
+            const response = await apiClient.post('/api/telegram/message', {
+              content,
+            });
+            return { platform, data: response.data };
+          }
 
-      if (isScheduled) {
-        const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}`);
-        formData.append('scheduledFor', scheduledDateTime.toISOString());
-      }
+          if (platform === 'discord') {
+            const response = await apiClient.post('/api/discord/message', {
+              content,
+            });
+            return { platform, data: response.data };
+          }
 
-      // Add media files
-      media.forEach((m, index) => {
-        formData.append(`media_${index}`, m.file);
-      });
-
-      await apiClient.post('/posts', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      toast.success(
-        isScheduled
-          ? 'Post scheduled successfully!'
-          : 'Post published successfully!'
+          // WHY throw for unimplemented platforms: Surface a clear error
+          // instead of silently skipping. Disabled platforms should not
+          // appear in selectedPlatforms, but this is a safety net.
+          throw new Error(`${platform} posting is not yet available`);
+        })
       );
 
-      // Reset form
-      setContent('');
-      setSelectedPlatforms([]);
-      setMedia([]);
-      setScheduledDate('');
-      setScheduledTime('');
-      setIsScheduled(false);
+      // -----------------------------------------------------------------------
+      // Tally results and show per-platform feedback
+      // -----------------------------------------------------------------------
+      const succeeded: string[] = [];
+      const failed: string[] = [];
 
-      // Navigate to dashboard
-      setTimeout(() => navigate('/dashboard'), 1500);
+      platformResults.forEach((result, index) => {
+        const platform = selectedPlatforms[index];
+        if (result.status === 'fulfilled') {
+          succeeded.push(platform);
+        } else {
+          failed.push(platform);
+          console.error(`Failed to post to ${platform}:`, result.reason);
+        }
+      });
+
+      if (succeeded.length > 0 && failed.length === 0) {
+        // All platforms succeeded
+        toast.success(
+          `Posted successfully to ${succeeded.join(', ')}!`
+        );
+        // Reset form
+        setContent('');
+        setSelectedPlatforms([]);
+        setMedia([]);
+        setScheduledDate('');
+        setScheduledTime('');
+        setIsScheduled(false);
+        setTimeout(() => navigate('/dashboard'), 1500);
+      } else if (succeeded.length > 0 && failed.length > 0) {
+        // Partial success - some platforms worked, some did not
+        toast.success(`Posted to ${succeeded.join(', ')}.`);
+        toast.error(`Failed to post to ${failed.join(', ')}. Check platform connections.`);
+        setContent('');
+        setSelectedPlatforms([]);
+      } else {
+        // All platforms failed
+        toast.error('Failed to post to all selected platforms. Check your platform connections.');
+      }
 
     } catch (error: any) {
       console.error('Failed to publish post:', error);
