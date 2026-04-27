@@ -179,7 +179,13 @@ export const ComposerPage: React.FC = () => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [, setShowAISuggestions] = useState(false);
+  // WHY separate loading state for AI: AI generation can take 2-4 seconds.
+  // A dedicated loading state keeps the AI button spinner independent from
+  // the publish button spinner so the user knows exactly what is happening.
+  const [showAISuggestions, setShowAISuggestions] = useState(false);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiVariations, setAiVariations] = useState<Array<{index: number; content: string}>>([]);
+  const [aiTopic, setAiTopic] = useState('');
 
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -415,10 +421,47 @@ export const ComposerPage: React.FC = () => {
   // AI SUGGESTIONS
   // ============================================================================
 
-  const generateAISuggestion = () => {
-    setShowAISuggestions(true);
-    // In production, this would call the AI API
-    toast.info('AI suggestions coming soon!');
+  const generateAISuggestion = async () => {
+    // WHY require topic: Generating content without a topic produces generic
+    // unusable results. The current content box text is used as the topic
+    // if it has enough characters, otherwise prompt the user to type a topic.
+    const topic = content.trim() || aiTopic.trim();
+    setAiTopic(topic);
+
+    if (topic.length < 3) {
+      toast.error('Type a topic or idea in the text box first, then click AI Assist.');
+      return;
+    }
+
+    if (selectedPlatforms.length === 0) {
+      toast.error('Select at least one platform before generating content.');
+      return;
+    }
+
+    setIsGeneratingAI(true);
+    setShowAISuggestions(false);
+    setAiVariations([]);
+
+    try {
+      const response = await apiClient.post('/api/ai/generate', {
+        topic,
+        platforms: selectedPlatforms,
+        tone: 'professional',
+        variations: 3,
+      });
+
+      const data = response.data;
+      setAiVariations(data.variations);
+      setShowAISuggestions(true);
+      toast.success('AI generated 3 content variations - pick one below!');
+    } catch (error: any) {
+      console.error('AI generation failed:', error);
+      toast.error(
+        error.response?.data?.detail || 'AI generation failed. Please try again.'
+      );
+    } finally {
+      setIsGeneratingAI(false);
+    }
   };
 
   const insertHashtag = () => {
@@ -523,16 +566,62 @@ export const ComposerPage: React.FC = () => {
                     onClick={generateAISuggestion}
                     className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors text-sm font-medium"
                   >
-                    <Sparkles className="w-4 h-4" />
-                    <span>AI Assist</span>
+                    {isGeneratingAI ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4" />
+                    )}
+                    <span>{isGeneratingAI ? 'Generating...' : 'AI Assist'}</span>
                   </button>
                 </div>
               </div>
 
+              {/* AI Suggestions Panel */}
+              {showAISuggestions && aiVariations.length > 0 && (
+                <div className="mb-3 border border-purple-200 dark:border-purple-800 rounded-lg overflow-hidden">
+                  <div className="bg-purple-50 dark:bg-purple-900/20 px-4 py-2 flex items-center justify-between">
+                    <span className="text-sm font-medium text-purple-700 dark:text-purple-300 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4" />
+                      AI Suggestions - click one to use it
+                    </span>
+                    <button
+                      onClick={() => setShowAISuggestions(false)}
+                      className="text-purple-500 hover:text-purple-700 text-xs"
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
+                  <div className="divide-y divide-purple-100 dark:divide-purple-800">
+                    {aiVariations.map((variation) => (
+                      <button
+                        key={variation.index}
+                        onClick={() => {
+                          // WHY replace not append: User clicked a variation to use it.
+                          // They want this content in the composer, not added to existing text.
+                          setContent(variation.content);
+                          setShowAISuggestions(false);
+                          toast.success('Content applied - edit as needed before posting!');
+                        }}
+                        className="w-full text-left px-4 py-3 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 text-xs font-bold flex items-center justify-center mt-0.5">
+                            {variation.index}
+                          </span>
+                          <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                            {variation.content}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="What's on your mind?"
+                placeholder="What's on your mind? Or type a topic and click AI Assist ✨"
                 rows={8}
                 className={`
                   w-full px-4 py-3 border rounded-lg resize-none

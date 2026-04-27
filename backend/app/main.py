@@ -15,6 +15,7 @@ from app.routers import auth as auth_router
 from app.routers import twitter as twitter_router
 from app.routers import telegram as telegram_router
 from app.routers import discord as discord_router
+from app.routers import ai as ai_router
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
@@ -39,6 +40,7 @@ app.include_router(auth_router.router)
 app.include_router(twitter_router.router)
 app.include_router(telegram_router.router)
 app.include_router(discord_router.router)
+app.include_router(ai_router.router)
 
 # CORS Configuration
 # WHY: Frontend (React) runs on different port (3000/5173)

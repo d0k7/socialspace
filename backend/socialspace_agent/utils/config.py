@@ -261,10 +261,18 @@ class Settings(BaseSettings):
         None,
         description="Anthropic Claude API key"
     )
-    
+
     openai_api_key: Optional[str] = Field(
         None,
         description="OpenAI API key"
+    )
+
+    # WHY Groq primary: Groq free tier provides 500+ tokens/sec — dramatically
+    # faster than OpenAI for real-time content generation UX. Primary AI
+    # provider for SocialSpace. OpenAI and Claude are fallbacks.
+    groq_api_key: Optional[str] = Field(
+        None,
+        description="Groq API key — primary AI provider"
     )
     
     # ============================================
