@@ -1,164 +1,500 @@
 /**
- * Platforms Page - Complete
- * 
- * Manage all 12 social media platform connections
+ * Platforms Page — Real Connection Status
+ * =========================================
+ * Rewritten: Phase 4, Session 4.2
+ *
+ * WHY this was rewritten:
+ * Previous version used a local platformStates useState array initialised with
+ * isConnected: false for all 12 platforms. Clicking Connect/Disconnect ran
+ * fake setTimeout calls — nothing was written to or read from the database.
+ * A real user (or interviewer) could not connect any platform from this page.
+ *
+ * What changed:
+ * - platformStates useState mock → 3 React Query status fetches (Telegram,
+ *   Discord, Twitter) that read real PlatformConnection rows from PostgreSQL
+ * - handleConnectionSubmit setTimeout stub → real POST mutations that call
+ *   /api/telegram/connect and /api/discord/connect with validation
+ * - handleDisconnect setTimeout stub → real DELETE mutations
+ * - Twitter "connect" → browser redirect to /api/auth/twitter/authorize (PKCE)
+ * - Twitter OAuth callback params (twitter_connected, twitter_error) read on
+ *   mount and shown as toasts, then cleaned from URL
+ *
+ * What did NOT change:
+ * - Page layout, card structure, stat grid, help section — all preserved
+ * - Business platforms (WhatsApp, Instagram, etc.) still show "coming soon"
+ *   because their backend integration is not yet built
+ * - Reddit and YouTube in Free Platforms also show "coming soon"
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import PlatformCard from '@/components/platforms/PlatformCard'
 import ConnectionModal from '@/components/platforms/ConnectionModal'
-import { usePlatforms, useConnectPlatform } from '@/hooks/usePlatforms'
+import {
+  getTelegramStatus,
+  getDiscordStatus,
+  getTwitterStatus,
+  connectTelegram,
+  connectDiscord,
+  disconnectTelegram,
+  disconnectDiscord,
+  disconnectTwitter,
+} from '@/api/endpoints/platformStatus'
+import apiClient from '@/api/client'
 import { PLATFORMS, PLATFORM_NAMES, type Platform } from '@/utils/constants'
-import { RefreshCw, Zap, CheckCircle2, XCircle, TrendingUp, AlertCircle } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
+import {
+  RefreshCw,
+  Zap,
+  CheckCircle2,
+  XCircle,
+  TrendingUp,
+  AlertCircle,
+  Loader2,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 
-interface PlatformState {
-  platform: Platform
-  isConnected: boolean
-  lastSync?: string
-  messageCount: number
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+/**
+ * Stable React Query cache keys for each platform's status query.
+ * WHY array format: Allows React Query's partial-match invalidation.
+ * queryClient.invalidateQueries({ queryKey: ['platform-status'] }) would
+ * invalidate all 3 at once if needed. Individual invalidation uses the full key.
+ */
+const STATUS_KEYS = {
+  telegram: ['platform-status', 'telegram'] as const,
+  discord: ['platform-status', 'discord'] as const,
+  twitter: ['platform-status', 'twitter'] as const,
 }
+
+/**
+ * The set of platforms that have real backend integration today.
+ * WHY a Set: O(1) lookup in isPlatformConnected and handleConnect guards.
+ * Anything not in this set shows "coming soon" when the user tries to connect.
+ */
+const LIVE_PLATFORMS = new Set<Platform>(['telegram', 'discord', 'twitter'])
+
+// ============================================================================
+// COMPONENT
+// ============================================================================
 
 export default function PlatformsPage() {
   const queryClient = useQueryClient()
+
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(null)
   const [showConnectionModal, setShowConnectionModal] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [testingPlatform, setTestingPlatform] = useState<Platform | null>(null)
 
-  // Fetch platforms
-  usePlatforms()
-  
-  // Mutations
-  const connectMutation = useConnectPlatform()
-  // Mock platform states (will be replaced with real API data)
-  const [platformStates, setPlatformStates] = useState<PlatformState[]>(
-    Object.values(PLATFORMS).map(platform => ({
-      platform,
-      isConnected: false,
-      messageCount: 0,
-    }))
-  )
+  // ==========================================================================
+  // TWITTER OAUTH CALLBACK HANDLER
+  //
+  // WHY on mount with empty deps (not useSearchParams):
+  // Twitter's PKCE flow completes on the backend, which redirects the browser
+  // to /platforms?twitter_connected=true&username=... or
+  // /platforms?twitter_error=invalid_state.
+  // We read these params exactly once on mount then remove them from the URL.
+  //
+  // WHY window.location.search not useSearchParams:
+  // If we used useSearchParams as a dep, calling setSearchParams({}) inside the
+  // effect would trigger a re-run, requiring an additional guard variable.
+  // Reading window.location.search directly + using window.history.replaceState
+  // is atomic and avoids the loop entirely.
+  // ==========================================================================
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const twitterConnected = params.get('twitter_connected')
+    const twitterError = params.get('twitter_error')
 
-  // Calculate stats
-  const connectedCount = platformStates.filter(p => p.isConnected).length
-  const totalCount = platformStates.length
-  const totalMessages = platformStates.reduce((sum, p) => sum + p.messageCount, 0)
+    // Nothing OAuth-related in URL — bail out immediately
+    if (!twitterConnected && !twitterError) return
 
-  // Handlers
+    if (twitterConnected === 'true') {
+      const username = params.get('username')
+      toast.success(
+        username
+          ? `Twitter connected as @${username}!`
+          : 'Twitter connected successfully!'
+      )
+      // Invalidate Twitter status so the card refreshes without a manual refresh
+      queryClient.invalidateQueries({ queryKey: STATUS_KEYS.twitter })
+    } else if (twitterError) {
+      // Map backend error codes to user-readable messages
+      const errorMessages: Record<string, string> = {
+        missing_params: 'Twitter auth failed: missing OAuth parameters. Please try again.',
+        invalid_state: 'Twitter auth failed: state mismatch. This may be a CSRF attempt or the session expired.',
+        token_exchange_failed: 'Twitter auth failed: could not exchange the authorization code for a token.',
+        user_fetch_failed: 'Twitter auth failed: could not fetch your Twitter profile.',
+        timeout: 'Twitter auth timed out. Please try again.',
+        network_error: 'Network error during Twitter auth. Check your connection and try again.',
+        db_error: 'Database error during Twitter auth. Please try again.',
+      }
+      toast.error(
+        errorMessages[twitterError] ||
+          `Twitter auth failed: ${twitterError}`
+      )
+    }
+
+    // Remove all OAuth params from URL without triggering a page reload.
+    // WHY replaceState not pushState: We do not want a "blank" history entry
+    // that the user can navigate back to, which would re-trigger the effect.
+    window.history.replaceState({}, '', window.location.pathname)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // WHY empty deps: intentional — this effect must run exactly once on mount
+  // to consume the Twitter OAuth redirect parameters.
+
+  // ==========================================================================
+  // STATUS QUERIES
+  //
+  // WHY staleTime 30_000 (30 seconds):
+  // Platform connection status rarely changes mid-session. 30s reduces backend
+  // load for users who quickly navigate away and back while keeping the UI
+  // fresh enough for interactive use. After any connect/disconnect mutation,
+  // we explicitly invalidate the relevant key so the next render always gets
+  // fresh data regardless of staleTime.
+  //
+  // WHY retry: false:
+  // A 401 from the status endpoint means the user's session is invalid.
+  // The axios interceptor handles token refresh transparently before React Query
+  // sees the error. If the interceptor fails to refresh, it redirects to login —
+  // retrying the status query at that point is wasteful and confusing.
+  // ==========================================================================
+  const {
+    data: telegramStatus,
+    isLoading: telegramLoading,
+    refetch: refetchTelegram,
+  } = useQuery({
+    queryKey: STATUS_KEYS.telegram,
+    queryFn: getTelegramStatus,
+    staleTime: 30_000,
+    retry: false,
+  })
+
+  const {
+    data: discordStatus,
+    isLoading: discordLoading,
+    refetch: refetchDiscord,
+  } = useQuery({
+    queryKey: STATUS_KEYS.discord,
+    queryFn: getDiscordStatus,
+    staleTime: 30_000,
+    retry: false,
+  })
+
+  const {
+    data: twitterStatus,
+    isLoading: twitterLoading,
+    refetch: refetchTwitter,
+  } = useQuery({
+    queryKey: STATUS_KEYS.twitter,
+    queryFn: getTwitterStatus,
+    staleTime: 30_000,
+    retry: false,
+  })
+
+  /** True while any of the 3 initial status fetches are in-flight */
+  const isLoadingAny = telegramLoading || discordLoading || twitterLoading
+
+  // ==========================================================================
+  // CONNECT MUTATIONS
+  //
+  // WHY separate mutations for Telegram and Discord (not one generic mutation):
+  // Each platform has a different request body shape, a different success
+  // message, and invalidates a different cache key. A single generic mutation
+  // would require branching inside mutationFn and make onSuccess/onError
+  // handlers ambiguous about which platform just connected.
+  //
+  // WHY Twitter connect is not a mutation:
+  // Twitter uses OAuth 2.0 PKCE — the connect action is window.location.href
+  // navigation to the backend authorize endpoint, not a fetch call.
+  // ==========================================================================
+  const connectTelegramMutation = useMutation({
+    mutationFn: ({ chatId, chatName }: { chatId: string; chatName?: string }) =>
+      connectTelegram(chatId, chatName),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: STATUS_KEYS.telegram })
+      toast.success(`Telegram connected to ${data.chat_name}!`)
+      setShowConnectionModal(false)
+      setSelectedPlatform(null)
+    },
+    onError: (error: Error) => {
+      // WHY extract response.data.detail:
+      // FastAPI returns error detail in error.response.data.detail.
+      // The generic error.message is axios's "Request failed with status code 400"
+      // which gives the user no actionable information.
+      const detail = (
+        error as unknown as { response?: { data?: { detail?: string } } }
+      )?.response?.data?.detail
+      toast.error(
+        detail ||
+          'Failed to connect Telegram. Make sure you have messaged @socialspace_agent_bot first.'
+      )
+    },
+  })
+
+  const connectDiscordMutation = useMutation({
+    mutationFn: ({
+      channelId,
+      channelName,
+    }: {
+      channelId: string
+      channelName?: string
+    }) => connectDiscord(channelId, channelName),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: STATUS_KEYS.discord })
+      toast.success(`Discord connected to #${data.channel_name}!`)
+      setShowConnectionModal(false)
+      setSelectedPlatform(null)
+    },
+    onError: (error: Error) => {
+      const detail = (
+        error as unknown as { response?: { data?: { detail?: string } } }
+      )?.response?.data?.detail
+      toast.error(
+        detail ||
+          'Failed to connect Discord. Make sure the SocialSpace bot is in your server.'
+      )
+    },
+  })
+
+  // ==========================================================================
+  // DISCONNECT MUTATION
+  //
+  // WHY a single mutation routes by platform (instead of 3 separate mutations):
+  // Disconnect is structurally identical for all 3 platforms — soft delete,
+  // clear tokens. The callsite becomes: disconnectMutation.mutate(platform).
+  // The branching lives in mutationFn, keeping the handlers clean.
+  // ==========================================================================
+  const disconnectMutation = useMutation({
+    mutationFn: (platform: Platform) => {
+      switch (platform) {
+        case 'telegram':
+          return disconnectTelegram()
+        case 'discord':
+          return disconnectDiscord()
+        case 'twitter':
+          return disconnectTwitter()
+        default:
+          // Defensive: business platforms cannot be disconnected until integrated
+          return Promise.reject(
+            new Error(`Disconnect not yet implemented for ${platform}`)
+          )
+      }
+    },
+    onSuccess: (_, platform) => {
+      // Invalidate only the disconnected platform's cache key.
+      // The other two stay cached — their status did not change.
+      const key = STATUS_KEYS[platform as keyof typeof STATUS_KEYS]
+      if (key) {
+        queryClient.invalidateQueries({ queryKey: key })
+      }
+      toast.success(`${PLATFORM_NAMES[platform]} disconnected`)
+    },
+    onError: (error: Error, platform) => {
+      const detail = (
+        error as unknown as { response?: { data?: { detail?: string } } }
+      )?.response?.data?.detail
+      toast.error(detail || `Failed to disconnect ${PLATFORM_NAMES[platform]}`)
+    },
+  })
+
+  // ==========================================================================
+  // DERIVED STATE HELPERS
+  // ==========================================================================
+
+  /**
+   * Returns true if the given platform has an active DB connection.
+   * For business platforms (not yet integrated), always returns false.
+   */
+  const isPlatformConnected = (platform: Platform): boolean => {
+    switch (platform) {
+      case 'telegram':
+        return telegramStatus?.connected ?? false
+      case 'discord':
+        return discordStatus?.connected ?? false
+      case 'twitter':
+        return twitterStatus?.connected ?? false
+      default:
+        return false
+    }
+  }
+
+  // Real connected count — only counts platforms with live backend integration
+  const connectedCount = (
+    ['telegram', 'discord', 'twitter'] as Platform[]
+  ).filter(isPlatformConnected).length
+
+  // Total number of platforms the product supports (all 12, including future ones)
+  const totalCount = Object.values(PLATFORMS).length
+
+  // Whether any connect mutation is currently in-flight (for modal loading state)
+  const isConnecting =
+    connectTelegramMutation.isPending || connectDiscordMutation.isPending
+
+  // ==========================================================================
+  // HANDLERS
+  // ==========================================================================
+
   const handleRefresh = async () => {
     setIsRefreshing(true)
     try {
-      await queryClient.invalidateQueries({ queryKey: ['platforms'] })
-      toast.success('Platforms refreshed!')
-    } catch (error) {
-      toast.error('Failed to refresh')
+      // Parallel refetch — all 3 fire simultaneously
+      await Promise.all([refetchTelegram(), refetchDiscord(), refetchTwitter()])
+      toast.success('Platform status refreshed')
+    } catch {
+      toast.error('Failed to refresh platform status')
     } finally {
-      setTimeout(() => setIsRefreshing(false), 1000)
+      // Brief delay so the spinner is visible even on fast connections
+      setTimeout(() => setIsRefreshing(false), 500)
     }
   }
 
   const handleConnect = (platform: Platform) => {
+    if (platform === 'twitter') {
+      // WHY window.location.href not a mutation:
+      // Twitter PKCE flow = backend generates state+verifier, stores server-side,
+      // returns 302 redirect to Twitter's auth URL. This is browser navigation,
+      // not a fetch. The redirect chain only works as a real navigation, not via
+      // fetch (which would follow the 302 internally and receive Twitter's HTML).
+      const apiBase = (
+        apiClient.defaults.baseURL || 'http://localhost:8000'
+      ).replace(/\/$/, '')
+      window.location.href = `${apiBase}/api/auth/twitter/authorize`
+      return
+    }
+
+    if (!LIVE_PLATFORMS.has(platform)) {
+      // Business platforms and non-integrated free platforms (Reddit, YouTube)
+      toast.error(`${PLATFORM_NAMES[platform]} integration coming soon!`)
+      return
+    }
+
     setSelectedPlatform(platform)
     setShowConnectionModal(true)
   }
 
-  const handleConnectionSubmit = async (_config: Record<string, string>) => {
+  const handleConnectionSubmit = (config: Record<string, string>) => {
     if (!selectedPlatform) return
 
-    try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
-
-      // Update state
-      setPlatformStates(prev =>
-        prev.map(p =>
-          p.platform === selectedPlatform
-            ? { ...p, isConnected: true, lastSync: new Date().toISOString() }
-            : p
-        )
-      )
-
-      toast.success(`${PLATFORM_NAMES[selectedPlatform]} connected successfully!`)
-      setShowConnectionModal(false)
-      setSelectedPlatform(null)
-    } catch (error) {
-      toast.error('Failed to connect platform')
+    if (selectedPlatform === 'telegram') {
+      const chatId = config.chat_id?.trim()
+      if (!chatId) {
+        toast.error('Chat ID is required')
+        return
+      }
+      // Pass chat_name if the user filled it in — optional field
+      connectTelegramMutation.mutate({
+        chatId,
+        chatName: config.chat_name?.trim() || undefined,
+      })
+    } else if (selectedPlatform === 'discord') {
+      const channelId = config.channel_id?.trim()
+      if (!channelId) {
+        toast.error('Channel ID is required')
+        return
+      }
+      connectDiscordMutation.mutate({
+        channelId,
+        channelName: config.channel_name?.trim() || undefined,
+      })
     }
   }
 
   const handleDisconnect = async (platform: Platform) => {
-    if (!window.confirm(`Disconnect ${PLATFORM_NAMES[platform]}?`)) return
-
-    try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      // Update state
-      setPlatformStates(prev =>
-        prev.map(p =>
-          p.platform === platform
-            ? { ...p, isConnected: false, lastSync: undefined, messageCount: 0 }
-            : p
-        )
-      )
-
-      toast.success(`${PLATFORM_NAMES[platform]} disconnected`)
-    } catch (error) {
-      toast.error('Failed to disconnect')
+    if (!isPlatformConnected(platform)) {
+      toast.error(`${PLATFORM_NAMES[platform]} is not connected`)
+      return
     }
+    if (
+      !window.confirm(
+        `Disconnect ${PLATFORM_NAMES[platform]}? Posts to this platform will stop.`
+      )
+    ) {
+      return
+    }
+    disconnectMutation.mutate(platform)
   }
 
   const handleTest = async (platform: Platform) => {
+    if (!LIVE_PLATFORMS.has(platform)) {
+      toast.error(`${PLATFORM_NAMES[platform]} integration not yet available`)
+      return
+    }
+
     setTestingPlatform(platform)
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      let connected = false
+      // WHY fresh API call not cached status:
+      // handleTest is the user explicitly asking "is this working RIGHT NOW?"
+      // The React Query cache may be up to 30s stale. A fresh call gives a
+      // definitive answer at the exact moment of testing.
+      switch (platform) {
+        case 'telegram': {
+          const result = await getTelegramStatus()
+          connected = result.connected
+          break
+        }
+        case 'discord': {
+          const result = await getDiscordStatus()
+          connected = result.connected
+          break
+        }
+        case 'twitter': {
+          const result = await getTwitterStatus()
+          connected = result.connected
+          break
+        }
+      }
 
-      const platformState = platformStates.find(p => p.platform === platform)
-      if (platformState?.isConnected) {
-        toast.success(`${PLATFORM_NAMES[platform]} connection is working!`)
+      if (connected) {
+        toast.success(`${PLATFORM_NAMES[platform]} is connected and responding`)
       } else {
         toast.error(`${PLATFORM_NAMES[platform]} is not connected`)
       }
-    } catch (error) {
-      toast.error('Connection test failed')
+    } catch {
+      toast.error(`${PLATFORM_NAMES[platform]} connection test failed`)
     } finally {
       setTestingPlatform(null)
     }
   }
 
-  const handleSettings = (platform: Platform) => {
-    toast.success(`Opening settings for ${PLATFORM_NAMES[platform]}`)
-    // Settings modal will be implemented later
-  }
-
-  const handleConnectAll = () => {
-    toast.success('Connect all platforms feature coming soon!')
-  }
-
   const handleTestAll = async () => {
-    const connectedPlatforms = platformStates.filter(p => p.isConnected)
-    
+    const connectedPlatforms = (
+      ['telegram', 'discord', 'twitter'] as Platform[]
+    ).filter(isPlatformConnected)
+
     if (connectedPlatforms.length === 0) {
-      toast.error('No platforms connected')
+      toast.error('No platforms connected to test')
       return
     }
 
-    toast.success(`Testing ${connectedPlatforms.length} platforms...`)
-    
+    toast.success(
+      `Testing ${connectedPlatforms.length} platform${connectedPlatforms.length > 1 ? 's' : ''}...`
+    )
+    // Sequential — wait for each test before starting the next so toasts are readable
     for (const platform of connectedPlatforms) {
-      await handleTest(platform.platform)
+      await handleTest(platform)
     }
   }
 
+  const handleSettings = (platform: Platform) => {
+    toast.success(`Settings for ${PLATFORM_NAMES[platform]} coming soon`)
+  }
+
+  // ==========================================================================
+  // RENDER
+  // ==========================================================================
+
   return (
     <div className="space-y-8 animate-fade-in">
+      {/* ------------------------------------------------------------------ */}
       {/* Header */}
+      {/* ------------------------------------------------------------------ */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -173,7 +509,7 @@ export default function PlatformsPage() {
             <Button
               variant="outline"
               onClick={handleTestAll}
-              disabled={testingPlatform !== null}
+              disabled={testingPlatform !== null || isLoadingAny}
               className="gap-2"
             >
               <Zap size={16} />
@@ -183,23 +519,29 @@ export default function PlatformsPage() {
           <Button
             variant="outline"
             onClick={handleRefresh}
-            disabled={isRefreshing}
+            disabled={isRefreshing || isLoadingAny}
             className="gap-2"
           >
-            <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+            <RefreshCw
+              size={16}
+              className={isRefreshing || isLoadingAny ? 'animate-spin' : ''}
+            />
             Refresh
           </Button>
         </div>
       </div>
 
+      {/* ------------------------------------------------------------------ */}
       {/* Stats Overview */}
+      {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* Supported Platforms — static count of all 12 product platforms */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  Total Platforms
+                  Supported Platforms
                 </p>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
                   {totalCount}
@@ -212,6 +554,7 @@ export default function PlatformsPage() {
           </CardContent>
         </Card>
 
+        {/* Connected — real count from DB */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
@@ -219,9 +562,16 @@ export default function PlatformsPage() {
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
                   Connected
                 </p>
-                <p className="text-3xl font-bold text-green-600 mt-2">
-                  {connectedCount}
-                </p>
+                {isLoadingAny ? (
+                  <Loader2
+                    className="animate-spin text-green-600 mt-3"
+                    size={28}
+                  />
+                ) : (
+                  <p className="text-3xl font-bold text-green-600 mt-2">
+                    {connectedCount}
+                  </p>
+                )}
               </div>
               <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
                 <CheckCircle2 className="text-green-600" size={24} />
@@ -230,6 +580,7 @@ export default function PlatformsPage() {
           </CardContent>
         </Card>
 
+        {/* Disconnected — total minus real connected count */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
@@ -237,9 +588,16 @@ export default function PlatformsPage() {
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
                   Disconnected
                 </p>
-                <p className="text-3xl font-bold text-gray-600 mt-2">
-                  {totalCount - connectedCount}
-                </p>
+                {isLoadingAny ? (
+                  <Loader2
+                    className="animate-spin text-gray-500 mt-3"
+                    size={28}
+                  />
+                ) : (
+                  <p className="text-3xl font-bold text-gray-600 mt-2">
+                    {totalCount - connectedCount}
+                  </p>
+                )}
               </div>
               <div className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                 <XCircle className="text-gray-600" size={24} />
@@ -248,15 +606,16 @@ export default function PlatformsPage() {
           </CardContent>
         </Card>
 
+        {/* Live Integrations — static count of platforms with real backend code */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  Total Messages
+                  Live Integrations
                 </p>
                 <p className="text-3xl font-bold text-purple-600 mt-2">
-                  {totalMessages}
+                  {LIVE_PLATFORMS.size}
                 </p>
               </div>
               <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
@@ -267,36 +626,51 @@ export default function PlatformsPage() {
         </Card>
       </div>
 
-      {/* Quick Actions */}
-      {connectedCount === 0 && (
+      {/* ------------------------------------------------------------------ */}
+      {/* Quick Start Banner — shown only when nothing is connected */}
+      {/* ------------------------------------------------------------------ */}
+      {!isLoadingAny && connectedCount === 0 && (
         <Card className="border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
           <CardContent className="p-6">
             <div className="flex items-start gap-4">
               <div className="text-5xl">🚀</div>
               <div className="flex-1">
                 <h3 className="text-xl font-bold text-blue-900 dark:text-blue-100 mb-2">
-                  Get Started!
+                  Get Started
                 </h3>
                 <p className="text-blue-700 dark:text-blue-300 mb-4">
-                  Connect your first platform to start managing your social media from one place.
+                  Connect Telegram or Discord to start posting from SocialSpace.
+                  Both are free with no paid API tier required.
                 </p>
-                <Button 
-                  variant="primary"
-                  onClick={handleConnectAll}
-                  className="gap-2"
-                >
-                  <CheckCircle2 size={16} />
-                  Connect Platforms
-                </Button>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant="primary"
+                    onClick={() => handleConnect('telegram')}
+                    className="gap-2"
+                  >
+                    <CheckCircle2 size={16} />
+                    Connect Telegram
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleConnect('discord')}
+                    className="gap-2"
+                  >
+                    <CheckCircle2 size={16} />
+                    Connect Discord
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
 
+      {/* ------------------------------------------------------------------ */}
       {/* Platform Categories */}
+      {/* ------------------------------------------------------------------ */}
       <div className="space-y-6">
-        {/* FREE Platforms */}
+        {/* FREE Platforms — Telegram/Discord/Twitter have live integration */}
         <div>
           <div className="flex items-center gap-3 mb-4">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -305,26 +679,24 @@ export default function PlatformsPage() {
             <Badge variant="success">Production Ready</Badge>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {['telegram', 'discord', 'reddit', 'twitter', 'youtube'].map((platform) => {
-              const state = platformStates.find(p => p.platform === platform)
-              return (
-                <PlatformCard
-                  key={platform}
-                  platform={platform as Platform}
-                  isConnected={state?.isConnected || false}
-                  lastSync={state?.lastSync}
-                  messageCount={state?.messageCount}
-                  onConnect={() => handleConnect(platform as Platform)}
-                  onDisconnect={() => handleDisconnect(platform as Platform)}
-                  onSettings={() => handleSettings(platform as Platform)}
-                  onTest={() => handleTest(platform as Platform)}
-                />
-              )
-            })}
+            {(
+              ['telegram', 'discord', 'reddit', 'twitter', 'youtube'] as Platform[]
+            ).map((platform) => (
+              <PlatformCard
+                key={platform}
+                platform={platform}
+                isConnected={isPlatformConnected(platform)}
+                messageCount={0}
+                onConnect={() => handleConnect(platform)}
+                onDisconnect={() => handleDisconnect(platform)}
+                onSettings={() => handleSettings(platform)}
+                onTest={() => handleTest(platform)}
+              />
+            ))}
           </div>
         </div>
 
-        {/* Business/Premium Platforms */}
+        {/* BUSINESS Platforms — require Company accounts or paid API tiers */}
         <div>
           <div className="flex items-center gap-3 mb-4">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -333,64 +705,75 @@ export default function PlatformsPage() {
             <Badge variant="warning">API Keys Required</Badge>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {['whatsapp', 'instagram', 'facebook', 'linkedin', 'tiktok', 'snapchat', 'pinterest'].map((platform) => {
-              const state = platformStates.find(p => p.platform === platform)
-              return (
-                <PlatformCard
-                  key={platform}
-                  platform={platform as Platform}
-                  isConnected={state?.isConnected || false}
-                  lastSync={state?.lastSync}
-                  messageCount={state?.messageCount}
-                  onConnect={() => handleConnect(platform as Platform)}
-                  onDisconnect={() => handleDisconnect(platform as Platform)}
-                  onSettings={() => handleSettings(platform as Platform)}
-                  onTest={() => handleTest(platform as Platform)}
-                />
-              )
-            })}
+            {(
+              [
+                'whatsapp',
+                'instagram',
+                'facebook',
+                'linkedin',
+                'tiktok',
+                'snapchat',
+                'pinterest',
+              ] as Platform[]
+            ).map((platform) => (
+              <PlatformCard
+                key={platform}
+                platform={platform}
+                isConnected={false}
+                messageCount={0}
+                onConnect={() => handleConnect(platform)}
+                onDisconnect={() => handleDisconnect(platform)}
+                onSettings={() => handleSettings(platform)}
+                onTest={() => handleTest(platform)}
+              />
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Help Section */}
+      {/* ------------------------------------------------------------------ */}
+      {/* Connection Guide */}
+      {/* ------------------------------------------------------------------ */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <AlertCircle size={20} className="text-blue-600" />
-            Need Help?
+            Connection Guide
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                Connection Issues?
+                Telegram
               </h4>
               <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li>• Check your API credentials are correct</li>
-                <li>• Ensure your API keys have proper permissions</li>
-                <li>• Try disconnecting and reconnecting</li>
-                <li>• Use the "Test Connection" feature</li>
+                <li>1. Open Telegram and message @socialspace_agent_bot</li>
+                <li>2. Then message @userinfobot to get your numeric chat ID</li>
+                <li>3. Click Connect Telegram and paste your chat ID</li>
+                <li>4. The bot sends a confirmation message to confirm</li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                Getting API Keys
+                Discord
               </h4>
               <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li>• Each platform has a developer portal</li>
-                <li>• Create an app/bot on the platform</li>
-                <li>• Generate API credentials</li>
-                <li>• Copy and paste them here securely</li>
+                <li>1. Enable Developer Mode in Discord (Settings &gt; Advanced)</li>
+                <li>2. Make sure the SocialSpace bot is in your server</li>
+                <li>3. Right-click your target channel and select Copy Channel ID</li>
+                <li>4. Click Connect Discord and paste the channel ID</li>
               </ul>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Connection Modal */}
-      {selectedPlatform && (
+      {/* ------------------------------------------------------------------ */}
+      {/* Connection Modal — shown only for Telegram and Discord */}
+      {/* Twitter connect is a browser redirect, not a modal */}
+      {/* ------------------------------------------------------------------ */}
+      {selectedPlatform && showConnectionModal && (
         <ConnectionModal
           platform={selectedPlatform}
           isOpen={showConnectionModal}
@@ -399,7 +782,7 @@ export default function PlatformsPage() {
             setSelectedPlatform(null)
           }}
           onConnect={handleConnectionSubmit}
-          connecting={connectMutation.isPending}
+          connecting={isConnecting}
         />
       )}
     </div>

@@ -1,7 +1,14 @@
 /**
  * Connection Modal Component
- * 
- * Modal for connecting a platform with API keys
+ *
+ * Modal for connecting a platform to SocialSpace.
+ *
+ * IMPORTANT — Telegram and Discord fields:
+ * SocialSpace already has bot tokens for Telegram and Discord in backend .env.
+ * The user does NOT provide a bot token. They provide their destination:
+ *   - Telegram: their chat_id (numeric ID of the chat/group/channel)
+ *   - Discord:  the channel_id (numeric ID of the target channel)
+ * All other platforms use the generic API key pattern (not yet integrated).
  */
 
 import { useState } from 'react'
@@ -44,29 +51,41 @@ export default function ConnectionModal({
   }> => {
     switch (platform) {
       case 'telegram':
+        // WHY chat_id not bot_token:
+        // SocialSpace has the Telegram bot token in backend .env already.
+        // The user only provides their chat destination — the numeric chat_id
+        // of the private chat, group, or channel where posts should appear.
+        // Get chat_id by messaging @userinfobot on Telegram.
         return [
           {
-            key: 'bot_token',
-            label: 'Bot Token',
-            placeholder: '1234567890:ABCdefGHIjklMNOpqrsTUVwxyz',
-            type: 'password',
+            key: 'chat_id',
+            label: 'Your Telegram Chat ID',
+            placeholder: '1234567890',
+            type: 'text',
             required: true,
-            helpText: 'Get your bot token from @BotFather',
+            helpText:
+              'Message @userinfobot on Telegram to get your numeric chat ID. You must message @socialspace_agent_bot first before connecting.',
           },
         ]
-      
+
       case 'discord':
+        // WHY channel_id not bot_token:
+        // SocialSpace has the Discord bot token in backend .env already.
+        // The user provides the target channel where SocialSpace will post.
+        // Get channel_id by enabling Developer Mode in Discord then
+        // right-clicking the channel and selecting Copy Channel ID.
         return [
           {
-            key: 'bot_token',
-            label: 'Bot Token',
-            placeholder: 'Your Discord bot token',
-            type: 'password',
+            key: 'channel_id',
+            label: 'Discord Channel ID',
+            placeholder: '1234567890123456789',
+            type: 'text',
             required: true,
-            helpText: 'Create a bot at discord.com/developers',
+            helpText:
+              'Enable Developer Mode in Discord (Settings → Advanced → Developer Mode), then right-click your target channel and select Copy Channel ID.',
           },
         ]
-      
+
       case 'twitter':
         return [
           {
@@ -98,7 +117,7 @@ export default function ConnectionModal({
             required: true,
           },
         ]
-      
+
       case 'reddit':
         return [
           {
@@ -130,7 +149,7 @@ export default function ConnectionModal({
             required: true,
           },
         ]
-      
+
       case 'youtube':
         return [
           {
@@ -142,7 +161,7 @@ export default function ConnectionModal({
             helpText: 'Get API key from Google Cloud Console',
           },
         ]
-      
+
       default:
         return [
           {
@@ -203,7 +222,7 @@ export default function ConnectionModal({
                     Connect {PLATFORM_NAMES[platform]}
                   </CardTitle>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Enter your API credentials to connect
+                    Enter your connection details below
                   </p>
                 </div>
               </div>
@@ -224,7 +243,7 @@ export default function ConnectionModal({
                   <CheckCircle2 className="text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" size={20} />
                   <div className="flex-1">
                     <p className="text-sm text-blue-800 dark:text-blue-300 font-medium mb-2">
-                      How to get your credentials:
+                      How to connect:
                     </p>
                     <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside">
                       {getPlatformInstructions(platform).map((instruction, index) => (
@@ -309,24 +328,28 @@ export default function ConnectionModal({
   )
 }
 
-// Helper functions
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
 function getPlatformInstructions(platform: Platform): string[] {
   switch (platform) {
     case 'telegram':
       return [
-        'Open Telegram and search for @BotFather',
-        'Send /newbot and follow instructions',
-        'Copy the bot token provided',
+        'Open Telegram and send any message to @socialspace_agent_bot',
+        'Then message @userinfobot — it replies with your numeric chat ID',
+        'Paste that chat ID below and click Connect',
+        'The bot will send a confirmation message to your chat',
       ]
-    
+
     case 'discord':
       return [
-        'Go to discord.com/developers/applications',
-        'Create a new application',
-        'Go to Bot section and create a bot',
-        'Copy the bot token',
+        'Open Discord Settings → Advanced → enable Developer Mode',
+        'Make sure the SocialSpace bot is added to your server',
+        'Right-click your target channel and click Copy Channel ID',
+        'Paste that Channel ID below and click Connect',
       ]
-    
+
     case 'twitter':
       return [
         'Go to developer.twitter.com',
@@ -334,7 +357,7 @@ function getPlatformInstructions(platform: Platform): string[] {
         'Generate API keys and tokens',
         'Copy all credentials',
       ]
-    
+
     case 'reddit':
       return [
         'Go to reddit.com/prefs/apps',
@@ -342,7 +365,7 @@ function getPlatformInstructions(platform: Platform): string[] {
         'Copy client ID and secret',
         'Use your Reddit username and password',
       ]
-    
+
     case 'youtube':
       return [
         'Go to Google Cloud Console',
@@ -350,7 +373,7 @@ function getPlatformInstructions(platform: Platform): string[] {
         'Create credentials (API key)',
         'Copy the API key',
       ]
-    
+
     default:
       return [
         `Go to ${PLATFORM_NAMES[platform]} developer portal`,
@@ -376,6 +399,6 @@ function getPlatformDocLink(platform: Platform): string {
     snapchat: 'https://developers.snap.com',
     pinterest: 'https://developers.pinterest.com',
   }
-  
+
   return links[platform] || ''
 }
