@@ -74,4 +74,4 @@ Copy `backend/.env.example` to `backend/.env` and fill in your credentials.
 
 ## Author
 
-Dheeraj Mishra — [github.com/dheeraj07](https://github.com/dheeraj07)
+Dheeraj Mishra — https://github.com/d0k7
