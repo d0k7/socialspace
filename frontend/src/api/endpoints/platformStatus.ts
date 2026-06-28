@@ -1,24 +1,27 @@
 /**
- * Platform Status API — Real Endpoints for Live Platforms
+ * Platform Status API -- Real Endpoints for Live Platforms
  * =========================================================
  * Created: Phase 4, Session 4.2
+ * Updated: Phase 4, Session 4.3 -- Added Reddit OAuth 2.0 support
  *
  * WHY this file exists (separate from platforms.ts):
- * The existing platforms.ts targets /platforms/* — a unified API route that
- * does not exist yet on the backend. These 3 platforms (Telegram, Discord,
- * Twitter) have dedicated routers already live. This file calls those real
- * endpoints directly.
+ * The existing platforms.ts targets /platforms/* -- a unified API route that
+ * does not exist yet on the backend. These platforms (Telegram, Discord,
+ * Twitter, Reddit) have dedicated routers already live. This file calls
+ * those real endpoints directly.
  *
  * WHY not modify platforms.ts:
  * platforms.ts is the future unified API scaffold. It stays untouched for
  * the phase when a single /api/platforms endpoint is built. This file is
- * the production implementation for the 3 live platforms today.
+ * the production implementation for the live platforms today.
  *
  * Endpoints covered:
  *   Telegram : GET/POST/DELETE /api/telegram/status|connect|disconnect
  *   Discord  : GET/POST/DELETE /api/discord/status|connect|disconnect
  *   Twitter  : GET/DELETE      /api/auth/twitter/status|disconnect
  *              Twitter connect = browser redirect to /api/auth/twitter/authorize
+ *   Reddit   : GET/DELETE      /api/reddit/status|disconnect
+ *              Reddit connect  = browser redirect to /api/reddit/authorize
  */
 
 import apiClient from '@/api/client'
@@ -32,6 +35,7 @@ import apiClient from '@/api/client'
 // telegram.py /status returns: { connected, chat_id, chat_name }
 // discord.py  /status returns: { connected, channel_id, channel_name }
 // twitter.py  /status returns: { connected, username, display_name, expires_at }
+// reddit.py   /status returns: { connected, username, display_name }
 // ============================================================================
 
 export interface TelegramStatus {
@@ -50,7 +54,7 @@ export interface DiscordStatus {
   channel_id: string | null
   /**
    * Channel name fetched from Discord API at connect time and cached in
-   * PlatformConnection.platform_display_name. Authoritative — comes from
+   * PlatformConnection.platform_display_name. Authoritative -- comes from
    * Discord, not from the user.
    */
   channel_name: string | null
@@ -65,23 +69,39 @@ export interface TwitterStatus {
   display_name: string | null
   /**
    * ISO 8601 UTC datetime when the OAuth 2.0 access token expires.
-   * Twitter tokens expire after 2 hours. Auto-refresh is not yet implemented —
+   * Twitter tokens expire after 2 hours. Auto-refresh is not yet implemented --
    * manual reconnect via OAuth flow required after expiry.
    */
   expires_at: string | null
+}
+
+export interface RedditStatus {
+  /** Whether a PlatformConnection row exists with is_active=true for reddit */
+  connected: boolean
+  /**
+   * Reddit username stored in PlatformConnection.platform_username.
+   * Fetched from /api/v1/me at connect time and cached -- no live Reddit call
+   * on status check.
+   */
+  username: string | null
+  /**
+   * Formatted as "u/username" stored in PlatformConnection.platform_display_name.
+   * Used as the display label in the UI ("Connected as u/...").
+   */
+  display_name: string | null
 }
 
 // ============================================================================
 // STATUS ENDPOINTS
 // WHY read from our DB not from the platform API:
 // Status checks happen on every PlatformsPage load. Calling Twitter/Telegram/
-// Discord APIs on every load wastes quota, adds latency, and can fail when
-// the platform is temporarily down. Reading our own DB is fast and reliable.
+// Discord/Reddit APIs on every load wastes quota, adds latency, and can fail
+// when the platform is temporarily down. Reading our own DB is fast and reliable.
 // ============================================================================
 
 /**
  * Check Telegram connection status for the current authenticated user.
- * Reads PlatformConnection table — no live Telegram API call.
+ * Reads PlatformConnection table -- no live Telegram API call.
  */
 export async function getTelegramStatus(): Promise<TelegramStatus> {
   const response = await apiClient.get<TelegramStatus>('/api/telegram/status')
@@ -90,7 +110,7 @@ export async function getTelegramStatus(): Promise<TelegramStatus> {
 
 /**
  * Check Discord connection status for the current authenticated user.
- * Reads PlatformConnection table — no live Discord API call.
+ * Reads PlatformConnection table -- no live Discord API call.
  */
 export async function getDiscordStatus(): Promise<DiscordStatus> {
   const response = await apiClient.get<DiscordStatus>('/api/discord/status')
@@ -99,10 +119,19 @@ export async function getDiscordStatus(): Promise<DiscordStatus> {
 
 /**
  * Check Twitter connection status for the current authenticated user.
- * Reads PlatformConnection table — no live Twitter API call.
+ * Reads PlatformConnection table -- no live Twitter API call.
  */
 export async function getTwitterStatus(): Promise<TwitterStatus> {
   const response = await apiClient.get<TwitterStatus>('/api/auth/twitter/status')
+  return response.data
+}
+
+/**
+ * Check Reddit connection status for the current authenticated user.
+ * Reads PlatformConnection table -- no live Reddit API call.
+ */
+export async function getRedditStatus(): Promise<RedditStatus> {
+  const response = await apiClient.get<RedditStatus>('/api/reddit/status')
   return response.data
 }
 
@@ -111,16 +140,21 @@ export async function getTwitterStatus(): Promise<TwitterStatus> {
 //
 // WHY Telegram and Discord connect via POST (not OAuth redirect):
 // Both platforms authenticate SocialSpace via a static bot token already in
-// backend .env. The user only needs to supply their destination — a chat_id
+// backend .env. The user only needs to supply their destination -- a chat_id
 // (Telegram) or channel_id (Discord). The backend validates the destination
 // (Telegram: sends a test message; Discord: fetches channel info via bot),
 // then upserts a PlatformConnection row.
 //
 // WHY Twitter connect is NOT in this file:
-// Twitter uses OAuth 2.0 PKCE. There is no form — the backend generates a
-// code_verifier + state, stores them server-side, then returns a 302 redirect
-// to Twitter's authorization URL. The connect flow is a browser navigation to
-// GET /api/auth/twitter/authorize. No API call to make from the frontend.
+// Twitter uses OAuth 2.0 PKCE. The connect flow is a browser navigation to
+// GET /api/auth/twitter/authorize. No API call from the frontend.
+//
+// WHY Reddit connect is NOT in this file:
+// Reddit uses OAuth 2.0 Authorization Code flow. The connect flow is a browser
+// navigation to GET /api/reddit/authorize. The backend generates a CSRF state,
+// stores it in memory, and returns a 302 redirect to Reddit's consent page.
+// Reddit then redirects back to /api/reddit/callback with a code, which the
+// backend exchanges for tokens and stores in DB. No frontend API call needed.
 // ============================================================================
 
 /**
@@ -149,7 +183,7 @@ export async function connectTelegram(
  * The backend validates access by calling GET /channels/{channel_id} via bot token.
  * The SocialSpace bot must already be in the target server with Send Messages permission.
  *
- * @param channelId   - Numeric Discord channel ID (right-click channel → Copy Channel ID)
+ * @param channelId   - Numeric Discord channel ID (right-click channel -> Copy Channel ID)
  * @param channelName - Optional hint; backend overrides with authoritative name from Discord API
  */
 export async function connectDiscord(
@@ -165,7 +199,7 @@ export async function connectDiscord(
 
 // ============================================================================
 // DISCONNECT ENDPOINTS
-// All three are soft deletes on the backend — is_active set to false,
+// All four are soft deletes on the backend -- is_active set to false,
 // tokens JSON cleared. PlatformConnection row is preserved for audit history.
 // ============================================================================
 
@@ -184,5 +218,15 @@ export async function disconnectDiscord(): Promise<{ disconnected: boolean }> {
 /** Disconnect Twitter from the current user's account (soft delete). */
 export async function disconnectTwitter(): Promise<{ disconnected: boolean }> {
   const response = await apiClient.delete('/api/auth/twitter/disconnect')
+  return response.data
+}
+
+/**
+ * Disconnect Reddit from the current user's account (soft delete).
+ * Clears access_token, refresh_token, and tokens JSON in PlatformConnection.
+ * The row is preserved for audit history. is_active is set to false.
+ */
+export async function disconnectReddit(): Promise<{ disconnected: boolean }> {
+  const response = await apiClient.delete('/api/reddit/disconnect')
   return response.data
 }

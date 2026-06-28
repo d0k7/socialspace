@@ -1,29 +1,24 @@
 /**
- * Platforms Page — Real Connection Status
+ * Platforms Page -- Real Connection Status
  * =========================================
  * Rewritten: Phase 4, Session 4.2
+ * Updated:   Phase 4, Session 4.4 -- Reddit OAuth 2.0 added
  *
- * WHY this was rewritten:
+ * WHY this was rewritten (Session 4.2):
  * Previous version used a local platformStates useState array initialised with
  * isConnected: false for all 12 platforms. Clicking Connect/Disconnect ran
- * fake setTimeout calls — nothing was written to or read from the database.
+ * fake setTimeout calls -- nothing was written to or read from the database.
  * A real user (or interviewer) could not connect any platform from this page.
  *
- * What changed:
- * - platformStates useState mock → 3 React Query status fetches (Telegram,
- *   Discord, Twitter) that read real PlatformConnection rows from PostgreSQL
- * - handleConnectionSubmit setTimeout stub → real POST mutations that call
- *   /api/telegram/connect and /api/discord/connect with validation
- * - handleDisconnect setTimeout stub → real DELETE mutations
- * - Twitter "connect" → browser redirect to /api/auth/twitter/authorize (PKCE)
- * - Twitter OAuth callback params (twitter_connected, twitter_error) read on
- *   mount and shown as toasts, then cleaned from URL
- *
- * What did NOT change:
- * - Page layout, card structure, stat grid, help section — all preserved
- * - Business platforms (WhatsApp, Instagram, etc.) still show "coming soon"
- *   because their backend integration is not yet built
- * - Reddit and YouTube in Free Platforms also show "coming soon"
+ * Session 4.4 additions:
+ * - Reddit added to LIVE_PLATFORMS (OAuth 2.0 Authorization Code flow)
+ * - getRedditStatus useQuery added (reads real PlatformConnection rows)
+ * - Reddit OAuth callback params (reddit_connected, reddit_error) handled
+ *   in the existing mount effect alongside Twitter params
+ * - handleConnect Reddit case: browser redirect to /api/reddit/authorize
+ * - disconnectMutation Reddit case: calls disconnectReddit()
+ * - isPlatformConnected, connectedCount, handleTest, handleTestAll,
+ *   handleRefresh all updated to include reddit
  */
 
 import { useState, useEffect } from 'react'
@@ -37,11 +32,13 @@ import {
   getTelegramStatus,
   getDiscordStatus,
   getTwitterStatus,
+  getRedditStatus,
   connectTelegram,
   connectDiscord,
   disconnectTelegram,
   disconnectDiscord,
   disconnectTwitter,
+  disconnectReddit,
 } from '@/api/endpoints/platformStatus'
 import apiClient from '@/api/client'
 import { PLATFORMS, PLATFORM_NAMES, type Platform } from '@/utils/constants'
@@ -64,20 +61,25 @@ import toast from 'react-hot-toast'
  * Stable React Query cache keys for each platform's status query.
  * WHY array format: Allows React Query's partial-match invalidation.
  * queryClient.invalidateQueries({ queryKey: ['platform-status'] }) would
- * invalidate all 3 at once if needed. Individual invalidation uses the full key.
+ * invalidate all at once if needed. Individual invalidation uses the full key.
  */
 const STATUS_KEYS = {
   telegram: ['platform-status', 'telegram'] as const,
   discord: ['platform-status', 'discord'] as const,
   twitter: ['platform-status', 'twitter'] as const,
+  reddit: ['platform-status', 'reddit'] as const,
 }
 
 /**
  * The set of platforms that have real backend integration today.
  * WHY a Set: O(1) lookup in isPlatformConnected and handleConnect guards.
  * Anything not in this set shows "coming soon" when the user tries to connect.
+ *
+ * Reddit added Session 4.4: reddit.py OAuth 2.0 router is live.
+ * Credentials pending Reddit API approval -- connect will show a 503 until
+ * REDDIT_CLIENT_ID is in .env. The flow is wired end-to-end on our side.
  */
-const LIVE_PLATFORMS = new Set<Platform>(['telegram', 'discord', 'twitter'])
+const LIVE_PLATFORMS = new Set<Platform>(['telegram', 'discord', 'twitter', 'reddit'])
 
 // ============================================================================
 // COMPONENT
@@ -92,28 +94,37 @@ export default function PlatformsPage() {
   const [testingPlatform, setTestingPlatform] = useState<Platform | null>(null)
 
   // ==========================================================================
-  // TWITTER OAUTH CALLBACK HANDLER
+  // OAUTH CALLBACK HANDLER
   //
   // WHY on mount with empty deps (not useSearchParams):
-  // Twitter's PKCE flow completes on the backend, which redirects the browser
-  // to /platforms?twitter_connected=true&username=... or
-  // /platforms?twitter_error=invalid_state.
+  // Twitter and Reddit OAuth flows complete on the backend, which redirects the
+  // browser to /platforms?{platform}_connected=true or ?{platform}_error=...
   // We read these params exactly once on mount then remove them from the URL.
   //
   // WHY window.location.search not useSearchParams:
   // If we used useSearchParams as a dep, calling setSearchParams({}) inside the
   // effect would trigger a re-run, requiring an additional guard variable.
-  // Reading window.location.search directly + using window.history.replaceState
+  // Reading window.location.search directly + window.history.replaceState
   // is atomic and avoids the loop entirely.
+  //
+  // WHY one effect for both Twitter and Reddit (not two):
+  // Both platforms land on the same page (/platforms) and both need URL cleanup
+  // via replaceState. Two separate effects would each call replaceState, but
+  // both must run before the first replaceState wipes the params the other
+  // effect needs. One effect reads all OAuth params atomically.
   // ==========================================================================
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const twitterConnected = params.get('twitter_connected')
     const twitterError = params.get('twitter_error')
+    const redditConnected = params.get('reddit_connected')
+    const redditError = params.get('reddit_error')
 
-    // Nothing OAuth-related in URL — bail out immediately
-    if (!twitterConnected && !twitterError) return
+    // Nothing OAuth-related in URL -- bail out immediately
+    const hasOAuthParams = twitterConnected || twitterError || redditConnected || redditError
+    if (!hasOAuthParams) return
 
+    // -- Twitter --
     if (twitterConnected === 'true') {
       const username = params.get('username')
       toast.success(
@@ -125,18 +136,44 @@ export default function PlatformsPage() {
       queryClient.invalidateQueries({ queryKey: STATUS_KEYS.twitter })
     } else if (twitterError) {
       // Map backend error codes to user-readable messages
-      const errorMessages: Record<string, string> = {
+      const twitterErrorMessages: Record<string, string> = {
         missing_params: 'Twitter auth failed: missing OAuth parameters. Please try again.',
-        invalid_state: 'Twitter auth failed: state mismatch. This may be a CSRF attempt or the session expired.',
-        token_exchange_failed: 'Twitter auth failed: could not exchange the authorization code for a token.',
+        invalid_state:
+          'Twitter auth failed: state mismatch. This may be a CSRF attempt or the session expired.',
+        token_exchange_failed:
+          'Twitter auth failed: could not exchange the authorization code for a token.',
         user_fetch_failed: 'Twitter auth failed: could not fetch your Twitter profile.',
         timeout: 'Twitter auth timed out. Please try again.',
-        network_error: 'Network error during Twitter auth. Check your connection and try again.',
+        network_error:
+          'Network error during Twitter auth. Check your connection and try again.',
         db_error: 'Database error during Twitter auth. Please try again.',
       }
       toast.error(
-        errorMessages[twitterError] ||
-          `Twitter auth failed: ${twitterError}`
+        twitterErrorMessages[twitterError] || `Twitter auth failed: ${twitterError}`
+      )
+    }
+
+    // -- Reddit --
+    if (redditConnected === 'true') {
+      toast.success('Reddit connected! You can now post to subreddits.')
+      // Invalidate Reddit status so the card immediately shows Connected
+      queryClient.invalidateQueries({ queryKey: STATUS_KEYS.reddit })
+    } else if (redditError) {
+      const redditErrorMessages: Record<string, string> = {
+        access_denied:
+          'Reddit connection cancelled. You declined the authorization request.',
+        invalid_state:
+          'Reddit auth failed: state mismatch. This may be a CSRF attempt or the session expired.',
+        token_exchange_failed:
+          'Reddit auth failed: could not exchange the authorization code. Please try again.',
+        identity_fetch_failed:
+          'Reddit auth failed: could not fetch your Reddit profile. Please try again.',
+        no_code: 'Reddit auth failed: no authorization code received. Please try again.',
+        network_error:
+          'Network error during Reddit auth. Check your connection and try again.',
+      }
+      toast.error(
+        redditErrorMessages[redditError] || `Reddit auth failed: ${redditError}`
       )
     }
 
@@ -145,8 +182,8 @@ export default function PlatformsPage() {
     // that the user can navigate back to, which would re-trigger the effect.
     window.history.replaceState({}, '', window.location.pathname)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  // WHY empty deps: intentional — this effect must run exactly once on mount
-  // to consume the Twitter OAuth redirect parameters.
+  // WHY empty deps: intentional -- this effect must run exactly once on mount
+  // to consume the OAuth redirect parameters from Twitter and Reddit.
 
   // ==========================================================================
   // STATUS QUERIES
@@ -161,7 +198,7 @@ export default function PlatformsPage() {
   // WHY retry: false:
   // A 401 from the status endpoint means the user's session is invalid.
   // The axios interceptor handles token refresh transparently before React Query
-  // sees the error. If the interceptor fails to refresh, it redirects to login —
+  // sees the error. If the interceptor fails to refresh, it redirects to login --
   // retrying the status query at that point is wasteful and confusing.
   // ==========================================================================
   const {
@@ -197,8 +234,19 @@ export default function PlatformsPage() {
     retry: false,
   })
 
-  /** True while any of the 3 initial status fetches are in-flight */
-  const isLoadingAny = telegramLoading || discordLoading || twitterLoading
+  const {
+    data: redditStatus,
+    isLoading: redditLoading,
+    refetch: refetchReddit,
+  } = useQuery({
+    queryKey: STATUS_KEYS.reddit,
+    queryFn: getRedditStatus,
+    staleTime: 30_000,
+    retry: false,
+  })
+
+  /** True while any of the 4 initial status fetches are in-flight */
+  const isLoadingAny = telegramLoading || discordLoading || twitterLoading || redditLoading
 
   // ==========================================================================
   // CONNECT MUTATIONS
@@ -209,9 +257,10 @@ export default function PlatformsPage() {
   // would require branching inside mutationFn and make onSuccess/onError
   // handlers ambiguous about which platform just connected.
   //
-  // WHY Twitter connect is not a mutation:
-  // Twitter uses OAuth 2.0 PKCE — the connect action is window.location.href
-  // navigation to the backend authorize endpoint, not a fetch call.
+  // WHY Twitter and Reddit connect are NOT mutations:
+  // Both use OAuth browser redirect flows -- window.location.href navigation
+  // to the backend authorize endpoint. Fetch-based mutations cannot initiate
+  // a proper OAuth browser redirect chain.
   // ==========================================================================
   const connectTelegramMutation = useMutation({
     mutationFn: ({ chatId, chatName }: { chatId: string; chatName?: string }) =>
@@ -265,8 +314,8 @@ export default function PlatformsPage() {
   // ==========================================================================
   // DISCONNECT MUTATION
   //
-  // WHY a single mutation routes by platform (instead of 3 separate mutations):
-  // Disconnect is structurally identical for all 3 platforms — soft delete,
+  // WHY a single mutation routes by platform (instead of 4 separate mutations):
+  // Disconnect is structurally identical for all live platforms -- soft delete,
   // clear tokens. The callsite becomes: disconnectMutation.mutate(platform).
   // The branching lives in mutationFn, keeping the handlers clean.
   // ==========================================================================
@@ -279,6 +328,8 @@ export default function PlatformsPage() {
           return disconnectDiscord()
         case 'twitter':
           return disconnectTwitter()
+        case 'reddit':
+          return disconnectReddit()
         default:
           // Defensive: business platforms cannot be disconnected until integrated
           return Promise.reject(
@@ -288,7 +339,7 @@ export default function PlatformsPage() {
     },
     onSuccess: (_, platform) => {
       // Invalidate only the disconnected platform's cache key.
-      // The other two stay cached — their status did not change.
+      // The others stay cached -- their status did not change.
       const key = STATUS_KEYS[platform as keyof typeof STATUS_KEYS]
       if (key) {
         queryClient.invalidateQueries({ queryKey: key })
@@ -310,6 +361,8 @@ export default function PlatformsPage() {
   /**
    * Returns true if the given platform has an active DB connection.
    * For business platforms (not yet integrated), always returns false.
+   * For Reddit: returns true once reddit.py OAuth flow completes and
+   * REDDIT_CLIENT_ID credentials are approved and in .env.
    */
   const isPlatformConnected = (platform: Platform): boolean => {
     switch (platform) {
@@ -319,14 +372,16 @@ export default function PlatformsPage() {
         return discordStatus?.connected ?? false
       case 'twitter':
         return twitterStatus?.connected ?? false
+      case 'reddit':
+        return redditStatus?.connected ?? false
       default:
         return false
     }
   }
 
-  // Real connected count — only counts platforms with live backend integration
+  // Real connected count -- only counts platforms with live backend integration
   const connectedCount = (
-    ['telegram', 'discord', 'twitter'] as Platform[]
+    ['telegram', 'discord', 'twitter', 'reddit'] as Platform[]
   ).filter(isPlatformConnected).length
 
   // Total number of platforms the product supports (all 12, including future ones)
@@ -343,8 +398,13 @@ export default function PlatformsPage() {
   const handleRefresh = async () => {
     setIsRefreshing(true)
     try {
-      // Parallel refetch — all 3 fire simultaneously
-      await Promise.all([refetchTelegram(), refetchDiscord(), refetchTwitter()])
+      // Parallel refetch -- all 4 fire simultaneously
+      await Promise.all([
+        refetchTelegram(),
+        refetchDiscord(),
+        refetchTwitter(),
+        refetchReddit(),
+      ])
       toast.success('Platform status refreshed')
     } catch {
       toast.error('Failed to refresh platform status')
@@ -368,8 +428,23 @@ export default function PlatformsPage() {
       return
     }
 
+    if (platform === 'reddit') {
+      // WHY window.location.href not a mutation:
+      // Reddit Authorization Code flow = backend generates CSRF state, stores
+      // server-side, returns 302 redirect to Reddit's consent page. Same pattern
+      // as Twitter -- must be real browser navigation, not a fetch call.
+      // If REDDIT_CLIENT_ID is not yet in .env, the backend returns HTTP 503
+      // before the redirect -- the browser shows an error page. This is correct
+      // behaviour until the Reddit API application is approved.
+      const apiBase = (
+        apiClient.defaults.baseURL || 'http://localhost:8000'
+      ).replace(/\/$/, '')
+      window.location.href = `${apiBase}/api/reddit/authorize`
+      return
+    }
+
     if (!LIVE_PLATFORMS.has(platform)) {
-      // Business platforms and non-integrated free platforms (Reddit, YouTube)
+      // Business platforms and non-integrated free platforms
       toast.error(`${PLATFORM_NAMES[platform]} integration coming soon!`)
       return
     }
@@ -387,7 +462,7 @@ export default function PlatformsPage() {
         toast.error('Chat ID is required')
         return
       }
-      // Pass chat_name if the user filled it in — optional field
+      // Pass chat_name if the user filled it in -- optional field
       connectTelegramMutation.mutate({
         chatId,
         chatName: config.chat_name?.trim() || undefined,
@@ -449,6 +524,11 @@ export default function PlatformsPage() {
           connected = result.connected
           break
         }
+        case 'reddit': {
+          const result = await getRedditStatus()
+          connected = result.connected
+          break
+        }
       }
 
       if (connected) {
@@ -465,7 +545,7 @@ export default function PlatformsPage() {
 
   const handleTestAll = async () => {
     const connectedPlatforms = (
-      ['telegram', 'discord', 'twitter'] as Platform[]
+      ['telegram', 'discord', 'twitter', 'reddit'] as Platform[]
     ).filter(isPlatformConnected)
 
     if (connectedPlatforms.length === 0) {
@@ -476,7 +556,7 @@ export default function PlatformsPage() {
     toast.success(
       `Testing ${connectedPlatforms.length} platform${connectedPlatforms.length > 1 ? 's' : ''}...`
     )
-    // Sequential — wait for each test before starting the next so toasts are readable
+    // Sequential -- wait for each test before starting the next so toasts are readable
     for (const platform of connectedPlatforms) {
       await handleTest(platform)
     }
@@ -535,7 +615,7 @@ export default function PlatformsPage() {
       {/* Stats Overview */}
       {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {/* Supported Platforms — static count of all 12 product platforms */}
+        {/* Supported Platforms -- static count of all 12 product platforms */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
@@ -554,7 +634,7 @@ export default function PlatformsPage() {
           </CardContent>
         </Card>
 
-        {/* Connected — real count from DB */}
+        {/* Connected -- real count from DB */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
@@ -580,7 +660,7 @@ export default function PlatformsPage() {
           </CardContent>
         </Card>
 
-        {/* Disconnected — total minus real connected count */}
+        {/* Disconnected -- total minus real connected count */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
@@ -606,7 +686,7 @@ export default function PlatformsPage() {
           </CardContent>
         </Card>
 
-        {/* Live Integrations — static count of platforms with real backend code */}
+        {/* Live Integrations -- static count of platforms with real backend code */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
@@ -627,7 +707,7 @@ export default function PlatformsPage() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Quick Start Banner — shown only when nothing is connected */}
+      {/* Quick Start Banner -- shown only when nothing is connected */}
       {/* ------------------------------------------------------------------ */}
       {!isLoadingAny && connectedCount === 0 && (
         <Card className="border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
@@ -670,7 +750,7 @@ export default function PlatformsPage() {
       {/* Platform Categories */}
       {/* ------------------------------------------------------------------ */}
       <div className="space-y-6">
-        {/* FREE Platforms — Telegram/Discord/Twitter have live integration */}
+        {/* FREE Platforms -- Telegram/Discord/Twitter/Reddit have live integration */}
         <div>
           <div className="flex items-center gap-3 mb-4">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -696,7 +776,7 @@ export default function PlatformsPage() {
           </div>
         </div>
 
-        {/* BUSINESS Platforms — require Company accounts or paid API tiers */}
+        {/* BUSINESS Platforms -- require Company accounts or paid API tiers */}
         <div>
           <div className="flex items-center gap-3 mb-4">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -770,8 +850,8 @@ export default function PlatformsPage() {
       </Card>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Connection Modal — shown only for Telegram and Discord */}
-      {/* Twitter connect is a browser redirect, not a modal */}
+      {/* Connection Modal -- shown only for Telegram and Discord */}
+      {/* Twitter and Reddit connect are browser redirects, not modals */}
       {/* ------------------------------------------------------------------ */}
       {selectedPlatform && showConnectionModal && (
         <ConnectionModal

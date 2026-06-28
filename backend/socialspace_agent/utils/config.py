@@ -312,6 +312,10 @@ class Settings(BaseSettings):
     
     reddit_client_id: Optional[str] = None
     reddit_client_secret: Optional[str] = None
+    reddit_redirect_uri: Optional[str] = Field(
+        default="http://localhost:8000/api/reddit/callback",
+        description="Reddit OAuth 2.0 callback URL - must match Reddit app settings exactly"
+    )
     
     youtube_api_key: Optional[str] = None
     tiktok_client_key: Optional[str] = None
