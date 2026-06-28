@@ -266,9 +266,9 @@ MIT License - See [LICENSE](LICENSE) file
 ## 👨‍💻 Author
 
 **Dheeraj Mishra**
-- GitHub: [@yourusername](https://github.com/yourusername)
-- LinkedIn: [Your Profile](https://linkedin.com/in/yourprofile)
-- Email: your.email@example.com
+- GitHub: [@Github Profile](https://github.com/d0k7)
+- LinkedIn: [Linkedin Profile](https://linkedin.com/in/dheeraj-mishra-535784249/)
+- Email: githubdheerajmishra@gmail.com
 
 ---
 
