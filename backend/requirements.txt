@@ -56,8 +56,15 @@ numpy>=1.26.0                # Numerical computing
 # ============================================
 sqlalchemy>=2.0.0            # SQL toolkit and ORM
 alembic>=1.13.0              # Database migrations
-redis>=5.0.0                 # Redis client
-aiosqlite>=0.19.0            # Async SQLite
+redis>=5.0.0,<6.5              # Redis client (ceiling required by celery[redis] 5.6.x)
+aiosqlite>=0.19.0              # Async SQLite
+
+# ============================================
+# TASK QUEUE & SCHEDULING (Added Phase 5, July 2026)
+# ============================================
+celery[redis]>=5.6.0         # Distributed task queue, pins Celery 5.6 line for
+                              # Python 3.11+ memory leak fixes and a broker
+                              # credential logging security fix
 
 # ============================================
 # HTTP & NETWORKING
