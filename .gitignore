@@ -57,3 +57,5 @@ docs/
 
 # Internal planning docs — contain personal identifiers, keep private
 docs/
+
+celerybeat-schedule*
