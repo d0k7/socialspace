@@ -32,6 +32,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Image as ImageIcon,
   Calendar,
@@ -45,9 +46,17 @@ import {
   Eye,
   Hash,
   Smile,
+  Clock,
+  XCircle,
 } from 'lucide-react';
 import apiClient from '@/api/client';
 import { useToast } from '../../components/common/Toast';
+import {
+  schedulePost,
+  getScheduledPosts,
+  cancelScheduledPost,
+  type SchedulePostRequest,
+} from '@/api/endpoints/posts';
 
 // ============================================================================
 // INTERFACES
@@ -157,6 +166,16 @@ const PLATFORMS: Platform[] = [
 ];
 
 // ============================================================================
+// QUERY KEYS
+// WHY a local const object, not a raw string literal inline: matches the
+// STATUS_KEYS pattern already established in PlatformsPage.tsx. Centralizing
+// the key here means the query and its invalidation after schedule or cancel
+// can never drift out of sync from a typo in one of the two call sites.
+// ============================================================================
+
+const SCHEDULED_POSTS_KEY = ['scheduled-posts'] as const;
+
+// ============================================================================
 // COMPONENT
 // ============================================================================
 
@@ -188,6 +207,66 @@ export const ComposerPage: React.FC = () => {
   const [aiTopic, setAiTopic] = useState('');
 
   const [errors, setErrors] = useState<string[]>([]);
+
+  // ============================================================================
+  // SCHEDULING -- Phase 5 backend, wired here for the first time
+  // ============================================================================
+
+  const queryClient = useQueryClient();
+
+  // WHY staleTime 30s, retry false: matches PlatformsPage.tsx's status queries
+  // exactly. The axios interceptor already handles 401 token refresh before
+  // React Query sees the error, so retrying here would just be wasted calls.
+  const {
+    data: scheduledPosts,
+    isLoading: isLoadingScheduled,
+    isError: isScheduledError,
+  } = useQuery({
+    queryKey: SCHEDULED_POSTS_KEY,
+    queryFn: getScheduledPosts,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const scheduleMutation = useMutation({
+    mutationFn: (request: SchedulePostRequest) => schedulePost(request),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: SCHEDULED_POSTS_KEY });
+      toast.success(
+        `Post scheduled for ${new Date(data.scheduled_at_utc).toLocaleString()}!`
+      );
+      setContent('');
+      setSelectedPlatforms([]);
+      setMedia([]);
+      setScheduledDate('');
+      setScheduledTime('');
+      setIsScheduled(false);
+    },
+    onError: (error: Error) => {
+      // WHY extract response.data.detail: same reasoning as PlatformsPage.tsx's
+      // connect mutations. posts.py's 400 responses carry a specific, actionable
+      // detail string (e.g. which platform is not connected) that generic
+      // error.message would discard.
+      const detail = (
+        error as unknown as { response?: { data?: { detail?: string } } }
+      )?.response?.data?.detail;
+      toast.error(detail || 'Failed to schedule post. Please try again.');
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (postId: string) => cancelScheduledPost(postId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: SCHEDULED_POSTS_KEY });
+      toast.success('Scheduled post cancelled.');
+    },
+    onError: (error: Error) => {
+      const detail = (
+        error as unknown as { response?: { data?: { detail?: string } } }
+      )?.response?.data?.detail;
+      toast.error(detail || 'Failed to cancel post.');
+    },
+  });
 
   // ============================================================================
   // PLATFORM HANDLERS
@@ -379,6 +458,41 @@ export const ComposerPage: React.FC = () => {
     } finally {
       setIsPublishing(false);
     }
+  };
+
+  /**
+   * handleSchedulePost
+   *
+   * WHY a separate function from handlePublish, not a branch inside it:
+   * handlePublish's Promise.allSettled logic calls platform-specific "send
+   * now" endpoints directly and is proven correct end to end since Phase 2.
+   * Scheduling is a fundamentally different call, one POST to the real
+   * Phase 5 backend, not a fan-out per platform, so it gets its own function
+   * rather than a conditional that makes the already-proven path riskier
+   * to read and change.
+   *
+   * WHY Intl.DateTimeFormat().resolvedOptions().timeZone, not a hardcoded
+   * zone: posts.py's ScheduledPost.timezone stores the actual IANA name the
+   * user meant, not a numeric offset, specifically so daylight saving stays
+   * correct. A hardcoded zone would silently mis-schedule any user not in it.
+   */
+  const handleSchedulePost = () => {
+    if (!validate()) return;
+
+    // WHY string concatenation, not new Date(...).toISOString(): toISOString
+    // always returns UTC with a trailing Z. The backend explicitly rejects any
+    // scheduled_at_local value carrying an offset or Z, it wants the raw
+    // wall clock time the user picked, with timezone sent separately, so it
+    // can do the UTC conversion itself against a known zone.
+    const scheduledAtLocal = `${scheduledDate}T${scheduledTime}:00`;
+    const ianaTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    scheduleMutation.mutate({
+      content,
+      platforms: selectedPlatforms,
+      scheduled_at_local: scheduledAtLocal,
+      timezone: ianaTimezone,
+    });
   };
 
   const handleSaveDraft = async () => {
@@ -854,11 +968,11 @@ export const ComposerPage: React.FC = () => {
             <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 space-y-3">
               {/* Publish/Schedule Button */}
               <button
-                onClick={handlePublish}
-                disabled={isPublishing || isOverLimit}
+                onClick={() => (isScheduled ? handleSchedulePost() : handlePublish())}
+                disabled={isPublishing || scheduleMutation.isPending || isOverLimit}
                 className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition-colors font-medium disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {isPublishing ? (
+                {(isScheduled ? scheduleMutation.isPending : isPublishing) ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
                     <span>{isScheduled ? 'Scheduling...' : 'Publishing...'}</span>
@@ -922,6 +1036,73 @@ export const ComposerPage: React.FC = () => {
               </ul>
             </div>
           </div>
+        </div>
+
+        {/* Scheduled Posts */}
+        <div className="mt-8 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+            <Clock className="w-5 h-5" />
+            Scheduled Posts
+          </h2>
+
+          {isLoadingScheduled ? (
+            <div className="flex items-center justify-center py-8 text-gray-500 dark:text-gray-400">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              <span>Loading scheduled posts...</span>
+            </div>
+          ) : isScheduledError ? (
+            <p className="text-sm text-red-600 dark:text-red-400 py-4">
+              Could not load scheduled posts. Refresh the page to try again.
+            </p>
+          ) : scheduledPosts && scheduledPosts.length > 0 ? (
+            <div className="space-y-3">
+              {scheduledPosts.map((post) => (
+                <div
+                  key={post.post_id}
+                  className="flex items-start justify-between gap-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-900 dark:text-gray-100 truncate">
+                      {post.content_preview}
+                    </p>
+                    <div className="flex items-center flex-wrap gap-2 mt-2">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300">
+                        {new Date(post.scheduled_at_utc).toLocaleString()} ({post.timezone})
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {post.platforms.join(', ')}
+                      </span>
+                      {/* WHY show retry_count only when > 0: this is the first
+                          place in the UI that the untested retry path becomes
+                          visible the moment it actually fires for real. */}
+                      {post.retry_count > 0 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300">
+                          Retry {post.retry_count}/{post.max_retries}
+                        </span>
+                      )}
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 capitalize">
+                        {post.status}
+                      </span>
+                    </div>
+                  </div>
+                  {post.status === 'scheduled' && (
+                    <button
+                      onClick={() => cancelMutation.mutate(post.post_id)}
+                      disabled={cancelMutation.isPending}
+                      title="Cancel this scheduled post"
+                      className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50 transition-colors flex-shrink-0"
+                    >
+                      <XCircle className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400 py-4">
+              Nothing scheduled yet. Toggle "Schedule Post" above to queue one up.
+            </p>
+          )}
         </div>
       </div>
     </div>
