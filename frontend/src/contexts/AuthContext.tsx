@@ -19,6 +19,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithTokens: (accessToken: string, refreshToken: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -103,6 +104,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   // --------------------------------------------------------------------------
+  // LOGIN WITH TOKENS (Google Sign-In)
+  // WHY separate from login(): login() calls /api/auth/login itself with
+  // email and password. Google's tokens already exist by the time the
+  // frontend sees them, minted by /api/auth/google/callback using the
+  // exact same create_access_token/create_refresh_token as a password
+  // login. This just stores them and fetches the profile, mirroring what
+  // restoreSession already does on every app load.
+  // --------------------------------------------------------------------------
+  const loginWithTokens = async (accessToken: string, refreshToken: string): Promise<void> => {
+    localStorage.setItem(KEYS.ACCESS_TOKEN, accessToken);
+    localStorage.setItem(KEYS.REFRESH_TOKEN, refreshToken);
+
+    const response = await apiClient.get('/api/auth/me');
+    localStorage.setItem(KEYS.USER, JSON.stringify(response.data));
+    setUser(response.data);
+  };
+
+  // --------------------------------------------------------------------------
   // REGISTER
   // --------------------------------------------------------------------------
   const register = async (name: string, email: string, password: string): Promise<void> => {
@@ -142,6 +161,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isAuthenticated: !!user,
         isLoading,
         login,
+        loginWithTokens,
         register,
         logout,
       }}

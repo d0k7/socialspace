@@ -18,6 +18,7 @@ from app.routers import discord as discord_router
 from app.routers import ai as ai_router
 from app.routers import reddit as reddit_router
 from app.routers import posts as posts_router
+from app.routers import google_auth as google_auth_router
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
@@ -45,6 +46,7 @@ app.include_router(discord_router.router)
 app.include_router(ai_router.router)
 app.include_router(reddit_router.router)
 app.include_router(posts_router.router)
+app.include_router(google_auth_router.router)
 
 # CORS Configuration
 # WHY: Frontend (React) runs on different port (3000/5173)

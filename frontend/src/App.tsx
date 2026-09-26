@@ -30,6 +30,7 @@ import { MainLayout } from './components/layout/MainLayout';
 import {
   LoginPage,
   RegisterPage,
+  GoogleCallbackPage,
   DashboardPage,
   ComposerPage,
   AnalyticsPage,
@@ -98,6 +99,7 @@ const AppRoutes: React.FC = () => {
           </PublicRoute>
         }
       />
+      <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
 
       {/* Protected Routes */}
       <Route

@@ -316,6 +316,16 @@ class Settings(BaseSettings):
         default="http://localhost:8000/api/reddit/callback",
         description="Reddit OAuth 2.0 callback URL - must match Reddit app settings exactly"
     )
+
+    # WHY separate from the platform-posting credentials above: those exist
+    # so SocialSpace can post on a user's behalf. Google exists only to
+    # authenticate someone, once, at login, nothing ongoing.
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    google_redirect_uri: Optional[str] = Field(
+        default="http://localhost:8000/api/auth/google/callback",
+        description="Google OAuth 2.0 callback URL - must match Google Cloud Console exactly"
+    )
     
     youtube_api_key: Optional[str] = None
     tiktok_client_key: Optional[str] = None

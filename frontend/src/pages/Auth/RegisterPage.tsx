@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { GoogleSignInButton } from '../../components/auth/GoogleSignInButton';
 import { Loader2, CheckCircle } from 'lucide-react';
 
 export const RegisterPage: React.FC = () => {
@@ -146,6 +147,16 @@ export const RegisterPage: React.FC = () => {
             )}
           </button>
         </form>
+
+        <div className="mt-6 flex items-center gap-3">
+          <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+          <span className="text-xs text-gray-400 dark:text-gray-500">OR</span>
+          <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+        </div>
+
+        <div className="mt-6">
+          <GoogleSignInButton />
+        </div>
 
         <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
           Already have an account?{' '}

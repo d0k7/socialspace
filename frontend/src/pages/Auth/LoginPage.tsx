@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { GoogleSignInButton } from '../../components/auth/GoogleSignInButton';
 import { Loader2, CheckCircle } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
@@ -11,6 +12,16 @@ export const LoginPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  // WHY: surfaces the reason if google_auth.py's callback redirected here
+  // after a failure, instead of silently landing back on a blank login form.
+  useEffect(() => {
+    const googleError = searchParams.get('google_error');
+    if (googleError) {
+      setError(`Google sign-in failed (${googleError}). Please try again.`);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,6 +132,16 @@ export const LoginPage: React.FC = () => {
             )}
           </button>
         </form>
+
+        <div className="mt-6 flex items-center gap-3">
+          <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+          <span className="text-xs text-gray-400 dark:text-gray-500">OR</span>
+          <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+        </div>
+
+        <div className="mt-6">
+          <GoogleSignInButton />
+        </div>
 
         <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
           Don't have an account?{' '}
