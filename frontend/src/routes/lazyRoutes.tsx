@@ -48,6 +48,10 @@ export const RegisterPage = lazyLoad(
   () => import('../pages/Auth/RegisterPage')
 );
 
+export const GoogleCallbackPage = lazyLoad(
+  () => import('../pages/Auth/GoogleCallbackPage')
+);
+
 // Main Pages
 export const DashboardPage = lazyLoad(
   () => import('../pages/Dashboard/DashboardPage'),
@@ -99,6 +103,7 @@ export const preloadAnalytics = () => import('../pages/Analytics/AnalyticsPage')
 export default {
   LoginPage,
   RegisterPage,
+  GoogleCallbackPage,
   DashboardPage,
   ComposerPage,
   AnalyticsPage,
