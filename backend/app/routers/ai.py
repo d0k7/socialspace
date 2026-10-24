@@ -29,6 +29,7 @@ Content generation strategy:
 """
 
 import logging
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -184,14 +185,29 @@ def _build_user_prompt(topic: str, variations: int) -> str:
 # RESPONSE PARSER
 # ============================================================================
 
+# WHY a divider pattern: models often put a line of ---, *** or === between
+# posts. The old parser glued those lines onto the end of the previous post.
+_DIVIDER_RE = re.compile(r"^([-*_=])\1{2,}$")
+
+# WHY a numbered-item pattern: captures the list number and the text after it,
+# for "1. text", "1) text" and a bare "1." alone on its line. The (?!\d) guard
+# keeps decimals such as "1.5 million" from being read as list items.
+_NUMBERED_RE = re.compile(r"^(\d{1,2})[.)](?!\d)\s*(.*)$")
+
+
 def _parse_variations(raw_text: str, count: int) -> list[ContentVariation]:
     """
     Parse AI response into structured ContentVariation objects.
 
     WHY custom parser not structured output:
     Groq's free tier does not guarantee JSON mode on all models.
-    Numbered list format is more reliable and the parser handles
-    edge cases gracefully.
+    A numbered list is more reliable and the parser handles edge cases.
+
+    WHY two strategies, because replies differ from run to run:
+    A. Exactly `count` blocks separated by divider lines (---): each block
+       is one variation, and numbers inside a block cannot split it.
+    B. Otherwise, sequential numbered items: only the NEXT expected number
+       starts a new variation, so a list inside the last post stays in it.
 
     Args:
         raw_text: Raw AI response text
@@ -200,47 +216,72 @@ def _parse_variations(raw_text: str, count: int) -> list[ContentVariation]:
     Returns:
         List of ContentVariation objects
     """
-    variations = []
-    lines = raw_text.strip().split('\n')
-    current_variation = []
-    current_index = 0
+    # Split at divider lines and drop blank lines. Each block is a list of
+    # stripped, non-empty lines.
+    blocks: list[list[str]] = [[]]
+    for raw_line in raw_text.strip().split("\n"):
+        stripped = raw_line.strip()
+        if _DIVIDER_RE.match(stripped):
+            blocks.append([])
+        elif stripped:
+            blocks[-1].append(stripped)
+    blocks = [block for block in blocks if block]
 
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            continue
+    # ---- Strategy A: one variation per divider-separated block ----
+    if len(blocks) == count:
+        first_numbers: list[Optional[int]] = []
+        for block in blocks:
+            match = _NUMBERED_RE.match(block[0])
+            first_numbers.append(int(match.group(1)) if match else None)
 
-        # Detect numbered list items: "1.", "2.", "1)", "2)" etc.
-        is_new_item = False
-        for i in range(1, count + 2):
-            if stripped.startswith(f"{i}.") or stripped.startswith(f"{i})"):
-                # Save previous variation if exists
-                if current_variation and current_index > 0:
+        # WHY this check: a block that starts with the wrong number is probably
+        # intro text or a split list, so strategy B is safer for that reply.
+        if all(
+            number is None or number == position
+            for position, number in enumerate(first_numbers, start=1)
+        ):
+            parsed: list[ContentVariation] = []
+            for position, block in enumerate(blocks, start=1):
+                lines = list(block)
+                match = _NUMBERED_RE.match(lines[0])
+                if match and int(match.group(1)) == position:
+                    lines[0] = match.group(2).strip()
+                content = "\n".join(line for line in lines if line).strip()
+                if content:
+                    parsed.append(ContentVariation(index=position, content=content))
+            if len(parsed) == count:
+                return parsed
+
+    # ---- Strategy B: sequential numbered items ----
+    variations: list[ContentVariation] = []
+    current_lines: list[str] = []
+    expected = 1
+    for block in blocks:
+        for line in block:
+            match = _NUMBERED_RE.match(line)
+            if match and expected <= count and int(match.group(1)) == expected:
+                if expected > 1 and current_lines:
                     variations.append(ContentVariation(
-                        index=current_index,
-                        content='\n'.join(current_variation).strip(),
+                        index=expected - 1,
+                        content="\n".join(current_lines).strip(),
                     ))
-                # Start new variation
-                current_index = i
-                content_start = stripped[len(str(i)) + 1:].strip()
-                current_variation = [content_start] if content_start else []
-                is_new_item = True
-                break
-
-        if not is_new_item and current_index > 0:
-            current_variation.append(stripped)
+                first = match.group(2).strip()
+                current_lines = [first] if first else []
+                expected += 1
+            elif expected > 1:
+                current_lines.append(line)
 
     # Save the last variation
-    if current_variation and current_index > 0:
+    if expected > 1 and current_lines:
         variations.append(ContentVariation(
-            index=current_index,
-            content='\n'.join(current_variation).strip(),
+            index=expected - 1,
+            content="\n".join(current_lines).strip(),
         ))
 
     # WHY fallback: If parsing fails completely, return the raw text as one
     # variation rather than returning empty. User gets something useful.
     if not variations:
-        logger.warning("AI response parsing produced no variations — using raw text as fallback")
+        logger.warning("AI response parsing produced no variations, using raw text as fallback")
         variations.append(ContentVariation(
             index=1,
             content=raw_text.strip(),
