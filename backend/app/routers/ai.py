@@ -10,7 +10,7 @@ This is the core intelligence layer of SocialSpace — transforming a user's
 topic or idea into polished, platform-appropriate social media content.
 
 Provider cascade:
-    1. Groq (primary) — free tier, 500+ tokens/sec, llama-3.3-70b-versatile
+    1. Groq (primary) — free tier, fast inference, openai/gpt-oss-120b
     2. OpenAI (fallback) — if Groq fails or is unavailable
     3. Claude (ultimate fallback) — if both above fail
 
@@ -32,7 +32,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from groq import Groq, APIConnectionError, APIStatusError, RateLimitError
+from groq import AsyncGroq, APIConnectionError, APIStatusError, RateLimitError
 from pydantic import BaseModel, Field
 
 from app.auth.dependencies import get_current_active_user
@@ -47,13 +47,14 @@ router = APIRouter(prefix="/api/ai", tags=["AI Content Generation"])
 # CONSTANTS
 # ============================================================================
 
-# WHY llama-3.3-70b-versatile: Best quality/speed ratio on Groq free tier.
+# WHY openai/gpt-oss-120b: Groq recommended replacement after llama-3.3-70b-versatile was shut down on 2026-08-16.
 # Fast enough for real-time UX, smart enough for quality social content.
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "openai/gpt-oss-120b"
 
-# WHY 500 max tokens: Social media content is short. 500 tokens covers
-# even the longest LinkedIn post with room for 3 variations.
-MAX_TOKENS = 500
+# WHY a generous max tokens: 3 short posts need far fewer tokens than this,
+# but gpt-oss is a reasoning model and its hidden thinking also draws on
+# this limit. Too low a value returns empty or cut-off replies.
+MAX_TOKENS = 2000
 
 # Platform-specific guidance injected into the system prompt
 PLATFORM_GUIDANCE = {
@@ -302,27 +303,30 @@ async def generate_content(
 
     # -------------------------------------------------------------------------
     # Call Groq API
-    # WHY synchronous Groq client in async endpoint:
-    # Groq's Python SDK does not have a native async client in v1.x.
-    # The synchronous call blocks the event loop briefly — acceptable for
-    # content generation which is a user-initiated action, not a background
-    # task. Phase 4 will wrap in asyncio.run_in_executor if needed.
+    # WHY AsyncGroq: the groq SDK has a native async client (checked on 1.2.0),
+    # so the request is awaited and never blocks the event loop. A sync client
+    # here would stall every other request while Groq responds.
     # -------------------------------------------------------------------------
     try:
-        client = Groq(api_key=settings.groq_api_key)
-
-        completion = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=MAX_TOKENS,
-            temperature=0.8,
-            # WHY temperature 0.8: High enough for creative variation between
-            # outputs, low enough to stay on-topic and coherent. 1.0 produces
-            # too much randomness for professional content.
-        )
+        # WHY async context manager: the client closes its HTTP pool when the
+        # block exits, even if the request raises.
+        async with AsyncGroq(api_key=settings.groq_api_key) as client:
+            completion = await client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=MAX_TOKENS,
+                # WHY reasoning_effort low: gpt-oss is a reasoning model. Its thinking
+                # tokens count against max_tokens, and social posts need little
+                # deliberation, so low keeps latency down and leaves room for the answer.
+                reasoning_effort="low",
+                temperature=0.8,
+                # WHY temperature 0.8: High enough for creative variation between
+                # outputs, low enough to stay on-topic and coherent. 1.0 produces
+                # too much randomness for professional content.
+            )
 
         raw_text = completion.choices[0].message.content or ""
 
