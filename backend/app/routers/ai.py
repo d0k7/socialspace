@@ -148,6 +148,11 @@ def _build_system_prompt(platforms: list[str], tone: str) -> str:
 
     platform_section = "\n".join(platform_specs) if platform_specs else "- General social media post"
 
+    # WHY ask for dividers and plain text: live replies carried divider lines
+    # between posts and platform labels in bold markers at the start of a post.
+    # The composer inserts variation.content unchanged, so a label or asterisks
+    # would land in the user's post. The parser tolerates dividers, but asking
+    # for them keeps the reply shape predictable.
     return f"""You are SocialSpace AI, an expert social media content creator.
 Your job is to generate engaging, platform-optimized social media content.
 
@@ -162,6 +167,9 @@ Instructions:
 - Optimize content length and style for the specified platforms
 - Include relevant emojis where appropriate for the platform
 - Format your response as a numbered list: 1. [content] 2. [content] etc.
+- Put a line containing only --- between one post and the next
+- Write plain text only: no markdown, no asterisks, no bold
+- Do NOT start a post with a platform name or any other label, begin directly with the post text
 - Do NOT include labels like "Variation 1:" — just the content itself
 - Each variation must be meaningfully different in approach or angle
 - Never truncate content — every variation must be complete"""
