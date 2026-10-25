@@ -71,6 +71,21 @@ PARSER_CASES: list[tuple[str, str, list[str]]] = [
         "Here are your posts:\n---\n1. A\n---\n2. B\n---\n3. C",
         ["A", "B", "C"],
     ),
+    (
+        "intro_in_first_divided_block",
+        "Here are your posts:\n1. A\n---\n2. B\n---\n3. C",
+        ["A", "B", "C"],
+    ),
+    (
+        "intro_plus_inner_list_in_first_block",
+        "Here are your posts:\n1. A\n1. x\n2. y\n---\n2. B\n---\n3. C",
+        ["A\n1. x\n2. y", "B", "C"],
+    ),
+    (
+        "unnumbered_divided_reply_keeps_lead_line",
+        "Lead line:\n1. x\n2. y\n---\nPost two\n---\nPost three",
+        ["Lead line:\n1. x\n2. y", "Post two", "Post three"],
+    ),
 ]
 
 # ============================================================================
@@ -106,24 +121,23 @@ def test_parse_variations_known_shapes(raw_text: str, expected_contents: list[st
     assert [variation.index for variation in parsed] == list(range(1, len(expected_contents) + 1))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="known gap: posts beyond the requested count are folded into the last post",
-)
-def test_extra_posts_are_dropped_not_folded() -> None:
+def test_extra_posts_are_folded_into_the_last_post() -> None:
     """
-    Check that posts beyond the requested count are dropped, not folded.
+    Document what happens when the model returns more posts than requested.
 
-    WHY xfail strict: this gap was found while writing these tests. strict=True
-    means the suite fails as soon as the parser is fixed, which is the signal
-    to delete this marker.
+    WHY a normal test, not xfail: posts beyond the requested count are folded
+    into the last post (post 3 here). Dropping them instead would mean accepting
+    list numbers above the count as new posts, and then a numbered list of 4 or
+    more items inside the last post would start fake posts and lose its tail.
+    Neither shape was seen in real replies, and the fold keeps all the text.
+    This test pins the chosen behavior, so changing it is a deliberate act.
 
     Returns:
         None
 
     Raises:
-        AssertionError: Expected today, because the parser folds posts 4 and 5 into post 3
+        AssertionError: If the parser's handling of extra posts changes
     """
     parsed = _parse_variations("1. A\n2. B\n3. C\n4. D\n5. E", EXPECTED_COUNT)
 
-    assert [variation.content for variation in parsed] == ["A", "B", "C"]
+    assert [variation.content for variation in parsed] == ["A", "B", "C\n4. D\n5. E"]

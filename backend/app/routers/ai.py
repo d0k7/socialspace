@@ -205,7 +205,8 @@ def _parse_variations(raw_text: str, count: int) -> list[ContentVariation]:
 
     WHY two strategies, because replies differ from run to run:
     A. Exactly `count` blocks separated by divider lines (---): each block
-       is one variation, and numbers inside a block cannot split it.
+       is one variation, and numbers inside a block cannot split it. If the
+       later blocks are numbered, intro text before "1." in block 1 is dropped.
     B. Otherwise, sequential numbered items: only the NEXT expected number
        starts a new variation, so a list inside the last post stays in it.
 
@@ -234,6 +235,16 @@ def _parse_variations(raw_text: str, count: int) -> list[ContentVariation]:
             match = _NUMBERED_RE.match(block[0])
             first_numbers.append(int(match.group(1)) if match else None)
 
+        # WHY numbered_reply: when every later block starts with its own number,
+        # the reply numbers its posts, so a line before "1." in the first block
+        # is intro text. Without that evidence, a "1." inside the first block may
+        # be an inner list, and the lines before it belong to the post.
+        numbered_reply = count > 1 and all(
+            number == position
+            for position, number in enumerate(first_numbers, start=1)
+            if position > 1
+        )
+
         # WHY this check: a block that starts with the wrong number is probably
         # intro text or a split list, so strategy B is safer for that reply.
         if all(
@@ -243,6 +254,14 @@ def _parse_variations(raw_text: str, count: int) -> list[ContentVariation]:
             parsed: list[ContentVariation] = []
             for position, block in enumerate(blocks, start=1):
                 lines = list(block)
+                if position == 1 and numbered_reply:
+                    # WHY: drop intro lines such as "Here are your posts:" that
+                    # come before the first "1." marker.
+                    for offset, candidate in enumerate(lines):
+                        item = _NUMBERED_RE.match(candidate)
+                        if item and int(item.group(1)) == 1:
+                            lines = lines[offset:]
+                            break
                 match = _NUMBERED_RE.match(lines[0])
                 if match and int(match.group(1)) == position:
                     lines[0] = match.group(2).strip()
