@@ -153,6 +153,9 @@ def _build_system_prompt(platforms: list[str], tone: str) -> str:
     # The composer inserts variation.content unchanged, so a label or asterisks
     # would land in the user's post. The parser tolerates dividers, but asking
     # for them keeps the reply shape predictable.
+    # WHY forbid invented details: a live reply for a product launch topic carried
+    # a made up link (example.com) and three different invented product descriptions.
+    # The user could publish them unchecked, so the model must leave missing details out.
     return f"""You are SocialSpace AI, an expert social media content creator.
 Your job is to generate engaging, platform-optimized social media content.
 
@@ -170,6 +173,7 @@ Instructions:
 - Put a line containing only --- between one post and the next
 - Write plain text only: no markdown, no asterisks, no bold
 - Do NOT start a post with a platform name or any other label, begin directly with the post text
+- Never invent links, URLs, product names, features, prices or statistics that the topic does not state. If a detail is missing, leave it out and keep the post general
 - Do NOT include labels like "Variation 1:" — just the content itself
 - Each variation must be meaningfully different in approach or angle
 - Never truncate content — every variation must be complete"""
