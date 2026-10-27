@@ -275,6 +275,16 @@ class Settings(BaseSettings):
         description="Groq API key — primary AI provider"
     )
     
+    # WHY a setting for the model name: Groq retires models every few months
+    # (llama-3.3-70b-versatile was shut down on 2026-08-16 and AI Assist stayed
+    # dead until a live click). With a setting, a retirement is one line in .env
+    # plus an API restart, with no code change. The default is the model that
+    # was verified live on 2026-10-24.
+    groq_model: str = Field(
+        default="openai/gpt-oss-120b",
+        description="Groq model id used by AI Assist. Set GROQ_MODEL in .env after a retirement"
+    )
+
     # ============================================
     # PLATFORM API KEYS
     # ============================================

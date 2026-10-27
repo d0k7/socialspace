@@ -50,6 +50,9 @@ router = APIRouter(prefix="/api/ai", tags=["AI Content Generation"])
 
 # WHY openai/gpt-oss-120b: Groq recommended replacement after llama-3.3-70b-versatile was shut down on 2026-08-16.
 # Fast enough for real-time UX, smart enough for quality social content.
+# WHY a fallback constant: the model name now comes from settings.groq_model
+# (GROQ_MODEL in .env). This value is used only when that setting is blank, so
+# a stray empty GROQ_MODEL= line cannot send an empty model name to Groq.
 GROQ_MODEL = "openai/gpt-oss-120b"
 
 # WHY a generous max tokens: 3 short posts need far fewer tokens than this,
@@ -379,12 +382,17 @@ async def generate_content(
     # so the request is awaited and never blocks the event loop. A sync client
     # here would stall every other request while Groq responds.
     # -------------------------------------------------------------------------
+    # WHY a settings value with a code fallback: a model retirement then needs only a
+    # GROQ_MODEL line in .env and an API restart. A blank value falls back to the
+    # constant, so a stray empty line cannot send an empty model name to Groq.
+    model_name = (settings.groq_model or "").strip() or GROQ_MODEL
+
     try:
         # WHY async context manager: the client closes its HTTP pool when the
         # block exits, even if the request raises.
         async with AsyncGroq(api_key=settings.groq_api_key) as client:
             completion = await client.chat.completions.create(
-                model=GROQ_MODEL,
+                model=model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -421,7 +429,7 @@ async def generate_content(
             topic=request.topic,
             platforms=request.platforms,
             variations=variations,
-            model_used=GROQ_MODEL,
+            model_used=model_name,
             provider="groq",
         )
 
@@ -446,6 +454,18 @@ async def generate_content(
             exc.status_code,
             exc.message,
         )
+        # WHY a dedicated 404 branch: a retired model answers 404 model_not_found, and
+        # AI Assist stayed dead after the 2026-08-16 shutdown until a live click found it.
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
+            logger.error(
+                "Groq returned 404 for model %r: it is probably retired or misspelled. "
+                "Set GROQ_MODEL in .env (see console.groq.com/docs/deprecations) and restart the API",
+                model_name,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="The AI model is unavailable right now. The model name in the server settings needs updating.",
+            )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"AI service error: {exc.message}",
