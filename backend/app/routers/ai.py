@@ -159,6 +159,9 @@ def _build_system_prompt(platforms: list[str], tone: str) -> str:
     # WHY forbid invented details: a live reply for a product launch topic carried
     # a made up link (example.com) and three different invented product descriptions.
     # The user could publish them unchecked, so the model must leave missing details out.
+    # WHY also forbid invented backstory and purpose: two live replies for the same
+    # launch topic added months of late nights and a made up purpose such as
+    # streamlining workflow. The user wrote neither, and it would be published as fact.
     return f"""You are SocialSpace AI, an expert social media content creator.
 Your job is to generate engaging, platform-optimized social media content.
 
@@ -177,6 +180,7 @@ Instructions:
 - Write plain text only: no markdown, no asterisks, no bold
 - Do NOT start a post with a platform name or any other label, begin directly with the post text
 - Never invent links, URLs, product names, features, prices or statistics that the topic does not state. If a detail is missing, leave it out and keep the post general
+- Never invent personal history, timelines or effort (such as months of work, late nights or countless iterations), and never say what the product does, who it is for or what benefit it gives, unless the topic states it. Stick to what the topic says and invite feedback or questions instead
 - Do NOT include labels like "Variation 1:" — just the content itself
 - Each variation must be meaningfully different in approach or angle
 - Never truncate content — every variation must be complete"""
