@@ -6,7 +6,7 @@ social media presence across multiple platforms without constant human input.
 ## What it does
 
 - Connects to Telegram, Discord, Twitter, and Reddit
-- Generates AI content variations via Groq (llama-3.3-70b-versatile)
+- Generates AI content variations via Groq (openai/gpt-oss-120b)
 - Posts to multiple platforms simultaneously from a single composer UI
 - Learns brand voice and schedules posts autonomously (in progress)
 
