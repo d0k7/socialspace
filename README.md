@@ -14,7 +14,7 @@ social media presence across multiple platforms without constant human input.
 
 **Backend:** Python, FastAPI, PostgreSQL, SQLAlchemy 2.0 async, Alembic, JWT auth  
 **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, React Query  
-**AI:** Groq API (primary), OpenAI (fallback), Anthropic Claude (fallback)  
+**AI:** Groq API (single provider, no fallback yet)  
 **Platforms:** Telegram Bot API, Discord Bot API, Twitter OAuth 2.0 PKCE, Reddit OAuth 2.0
 
 ## Architecture
