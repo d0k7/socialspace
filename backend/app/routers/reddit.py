@@ -27,6 +27,7 @@ Phase: 4.3 - Reddit Integration
 
 import secrets
 import logging
+import os
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 
@@ -90,9 +91,12 @@ REDDIT_SCOPES: str = "identity submit"
 # TODO Phase 5: move to Redis when Celery + Redis infrastructure is live.
 _oauth_states: dict[str, str] = {}  # {state_token: user_id_str}
 
-# WHY hardcoded: config.py does not yet have FRONTEND_URL.
-# Will be moved to settings in Phase 5 when Celery config is added.
-FRONTEND_URL: str = "http://localhost:5173"
+# WHY read from the environment: the OAuth callback must send the browser back to
+# the address where the frontend really runs (Vite uses port 3000, not 5173).
+# Same pattern as google_auth.py. The .env file reaches os.getenv through
+# load_dotenv() in app/auth/security.py. rstrip keeps the redirect paths below
+# from producing a double slash.
+FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
 # Default token lifetime if Reddit omits expires_in (should never happen but defensive)
 DEFAULT_TOKEN_LIFETIME_SECONDS: int = 3600

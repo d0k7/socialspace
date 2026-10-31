@@ -287,7 +287,11 @@ async def twitter_callback(
         RedirectResponse to frontend /platforms page with success or error param
     """
     settings = get_settings()
-    frontend_url = settings.environment == "development" and "http://localhost:5173" or "http://localhost:5173"
+    # WHY read from the environment: the OAuth callback must send the browser back to
+    # where the frontend really runs. The old test on settings.environment gave the
+    # same address in both branches, and that address was the wrong port. Same pattern
+    # as google_auth.py and reddit.py, with a trailing slash stripped.
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
     # -------------------------------------------------------------------------
     # Handle user denial or Twitter error
