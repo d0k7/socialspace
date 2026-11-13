@@ -40,6 +40,7 @@ Author: Dheeraj Mishra / SocialSpace
 Phase: 5 - Celery + Redis Scheduling Engine
 """
 
+import html
 import logging
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -248,7 +249,10 @@ def publish_post(post_id: str) -> None:
                     result = send_telegram_sync(
                         bot_token=settings.telegram_bot_token,
                         chat_id=chat_id,
-                        content=post.content,
+                        # WHY: Telegram HTML parse mode rejects a bare < > or & with
+                        # HTTP 400, and post text is plain text, not markup. Escape it.
+                        # quote=False because Telegram only needs & < > escaped.
+                        content=html.escape(post.content, quote=False),
                     )
                 elif platform == "discord":
                     channel_id = connection.tokens.get("channel_id")
